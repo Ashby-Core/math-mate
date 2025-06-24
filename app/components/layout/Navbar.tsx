@@ -13,8 +13,8 @@ const Navbar = () => {
       </div>
 
       <div className="flex items-center gap-4">
-        <Button text="Login" />
-        <Button text="Sign Up" />
+        <Button text="Login" href='/login' />
+        <Button text="Sign Up" href='/signup' />
       </div>
     </nav>
   )
