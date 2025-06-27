@@ -18,45 +18,90 @@ export default function SignupPage() {
             <div className="flex justify-between">
               <TextInput
                 labelText="First Name"
+                name="first-name"
                 type="text"
                 placeholder="Enter your first name"
               />
               <TextInput
                 labelText="Last Name"
+                name="last-name"
                 type="text"
                 placeholder="Enter your last name"
               />
             </div>
             <TextInput
               labelText="Email"
+              name="email"
               type="email"
               placeholder="Enter your email"
             />
             <TextInput
               labelText="Username"
+              name="username"
               type="text"
               placeholder="Enter your username"
             />
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-3">
+                I am a
+              </label>
+              <div className="space-y-2">
+                <div className="flex items-center">
+                  <input
+                    id="student"
+                    name="role"
+                    type="radio"
+                    value="student"
+                    className="h-4 w-4 text-red-600 focus:ring-red-500 border-gray-300"
+                    required
+                  />
+                  <label
+                    htmlFor="student"
+                    className="ml-2 text-sm text-gray-900"
+                  >
+                    Student
+                  </label>
+                </div>
+                <div className="flex items-center">
+                  <input
+                    id="teacher"
+                    name="role"
+                    type="radio"
+                    value="teacher"
+                    className="h-4 w-4 text-red-600 focus:ring-red-500 border-gray-300"
+                    required
+                  />
+                  <label
+                    htmlFor="teacher"
+                    className="ml-2 text-sm text-gray-900"
+                  >
+                    Teacher
+                  </label>
+                </div>
+              </div>
+            </div>
             <Dropdown
               labelText="Demographic"
               name="demographic"
               options={[
-                "White",
-                "Black/African American",
-                "Asian/Pacific Islander",
-                "Hispanic or Latino",
-                "American Indian or Alaska Native",
-                "Two or more races",
-                "Other/Prefer Not to Say",
+                "white",
+                "black/african american",
+                "asian/pacific islander",
+                "hispanic or latino",
+                "american indian or alaska native",
+                "two or more races",
+                "other/prefer not to say",
               ]}
             />
             <TextInput
               labelText="Password"
+              name="password"
               type="password"
               placeholder="Enter your password"
             />
             <TextInput
               labelText="Confirm password"
+              name="confirm-password"
               type="password"
               placeholder="Confirm your password"
             />

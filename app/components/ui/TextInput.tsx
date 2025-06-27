@@ -2,11 +2,12 @@ import React from "react";
 
 interface TextInputProps {
     labelText: string;
+    name: string;
     type: string;
     placeholder: string;
 }
 
-const TextInput = ({ labelText, type, placeholder }: TextInputProps) => {
+const TextInput = ({ labelText, name, type, placeholder }: TextInputProps) => {
   return (
     <div>
       <label
@@ -16,8 +17,8 @@ const TextInput = ({ labelText, type, placeholder }: TextInputProps) => {
         {labelText}
       </label>
       <input
-        id={labelText.toLowerCase()}
-        name={labelText.toLowerCase()}
+        id={name}
+        name={name}
         type={type}
         required
         className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500"
