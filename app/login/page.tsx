@@ -14,11 +14,13 @@ export default function LoginPage() {
           <div className="space-y-4">
             <TextInput
               labelText="Email"
+              name="email"
               type="email"
               placeholder="Enter your email"
             />
             <TextInput
               labelText="Password"
+              name="password"
               type="password"
               placeholder="Enter your password"
             />

@@ -47,8 +47,19 @@ export async function signup(formData: FormData) {
     return { error: 'Failed to create profile: ' + profileError.message }
   }
 
+  if (userRole === 'teacher') {
+    const { error: teacherProfileError } = await supabase.from('teacher_profiles').insert({
+      id: authData.user.id,
+      school: null,
+    })
+
+    if (teacherProfileError) {
+      console.error("Error creating teacher record: ", teacherProfileError.message)
+    }
+  }
+
   console.log("User and profile created successfully!")
 
   revalidatePath('/', 'layout')
-  redirect('/')
+  redirect('/dashboard')
 }
