@@ -64,6 +64,18 @@ const TeacherPage = () => {
     setCreateCourseModalOpen(false);
   };
 
+  const generateCode = () => {
+    const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890"
+    let code = ""
+
+    for (let i = 0; i < 6; i += 1) {
+      const index = Math.floor(Math.random() * chars.length)
+      code += chars.charAt(index);
+    }
+
+    return code;
+  }
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
@@ -72,9 +84,11 @@ const TeacherPage = () => {
     const name = formJson.courseName;
 
     // TODO: Create method to generate random code
+    const randomCode = generateCode()
+
     await supabaseClient
       ?.from("courses")
-      .insert({ teacher: user?.id, name, code: "FOIDO56" });
+      .insert({ teacher: user?.id, name, code: randomCode });
     handleClose();
   };
 
