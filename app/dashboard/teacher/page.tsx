@@ -83,7 +83,6 @@ const TeacherPage = () => {
     const formJson = Object.fromEntries(formData.entries());
     const name = formJson.courseName;
 
-    // TODO: Create method to generate random code
     const randomCode = generateCode()
 
     await supabaseClient
