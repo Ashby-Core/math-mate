@@ -3,6 +3,7 @@ import Navbar from "@/app/components/dashboard/Navbar";
 import { Course, Profile } from "@/app/types";
 import { redirect } from "next/navigation";
 import AddCourse from "@/app/components/dashboard/AddCourse";
+import Link from "next/link";
 
 const generateCode = () => {
   const chars =
@@ -74,12 +75,14 @@ const TeacherPage = async () => {
     console.error("Error fetching courses: ", coursesError);
   }
 
-  const profile: Profile | null = profileData? {
-    first_name: profileData.first_name,
-    last_name: profileData.last_name,
-    username: profileData.username,
-  }: null
-  const courses: Course[] | null = coursesData
+  const profile: Profile | null = profileData
+    ? {
+        first_name: profileData.first_name,
+        last_name: profileData.last_name,
+        username: profileData.username,
+      }
+    : null;
+  const courses: Course[] | null = coursesData;
 
   return (
     <div>
@@ -98,7 +101,13 @@ const TeacherPage = async () => {
             <div className="grid gap-4">
               {courses.map((course, index: number) => (
                 <div key={index} className="p-4 border rounded-lg">
-                  <h3 className="font-medium">{course.name}</h3>
+                  <Link
+                    href={`/courses?id=${course.id}`}
+                    className="text-xl font-semibold text-red-700
+                  "
+                  >
+                    {course.name}
+                  </Link>
                   <p className="text-gray-600">Code: {course.code}</p>
                 </div>
               ))}
