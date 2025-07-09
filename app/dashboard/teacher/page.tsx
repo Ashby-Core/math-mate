@@ -102,7 +102,7 @@ const TeacherPage = async () => {
               {courses.map((course, index: number) => (
                 <div key={index} className="p-4 border rounded-lg">
                   <Link
-                    href={`/courses?id=${course.id}`}
+                    href={`/courses/${course.id}`}
                     className="text-xl font-semibold text-red-700
                   "
                   >
