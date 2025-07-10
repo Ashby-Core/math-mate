@@ -1,6 +1,6 @@
 import FormButton from "../components/ui/FormButton";
 import TextInput from "../components/ui/TextInput";
-import { login } from "./actions";
+import { login } from "../actions/actions";
 
 export default function LoginPage() {
   return (

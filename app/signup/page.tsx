@@ -1,7 +1,7 @@
 import Dropdown from "../components/ui/Dropdown";
 import FormButton from "../components/ui/FormButton";
 import TextInput from "../components/ui/TextInput";
-import { signup } from "./actions";
+import { signup } from "../actions/actions";
 
 export default function SignupPage() {
   return (

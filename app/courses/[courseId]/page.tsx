@@ -1,3 +1,5 @@
+import { createAssignment } from "@/app/actions/actions";
+import AddAssignment from "@/app/components/dashboard/AddAssignment";
 import { Course } from "@/app/types";
 import { createClient } from "@/utils/supabase/server";
 
@@ -26,6 +28,11 @@ export default async function CoursePage({
   return (
     <div>
       <h1>{course.name}</h1>
+      <h2>Course Code: {course.code}</h2>
+      <div>
+        <h2>Assignments</h2>
+        <AddAssignment courseId={course.id} createAssignmentAction={createAssignment} />
+      </div>
     </div>
   );
 }

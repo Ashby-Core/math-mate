@@ -4,46 +4,7 @@ import { Course, Profile } from "@/app/types";
 import { redirect } from "next/navigation";
 import AddCourse from "@/app/components/dashboard/AddCourse";
 import Link from "next/link";
-
-const generateCode = () => {
-  const chars =
-    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890";
-  let code = "";
-
-  for (let i = 0; i < 6; i += 1) {
-    const index = Math.floor(Math.random() * chars.length);
-    code += chars.charAt(index);
-  }
-
-  return code;
-};
-
-async function createCourse(formData: FormData) {
-  "use server";
-
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    redirect("/login");
-  }
-
-  const name = formData.get("courseName") as string;
-  const randomCode = generateCode();
-
-  const { error } = await supabase
-    ?.from("courses")
-    .insert({ teacher: user?.id, name, code: randomCode });
-
-  if (error) {
-    console.error("Error creating course");
-    return { error: error.message };
-  }
-
-  return { success: true };
-}
+import { createCourse } from "@/app/actions/actions";
 
 const TeacherPage = async () => {
   const supabase = await createClient();
@@ -77,8 +38,8 @@ const TeacherPage = async () => {
 
   const profile: Profile | null = profileData
     ? {
-        first_name: profileData.first_name,
-        last_name: profileData.last_name,
+        firstName: profileData.first_name,
+        lastName: profileData.last_name,
         username: profileData.username,
       }
     : null;
@@ -89,7 +50,7 @@ const TeacherPage = async () => {
       <Navbar></Navbar>
       <div className="p-6">
         <h1 className="text-4xl font-bold mb-4">
-          Hello, {profile?.first_name}!
+          Hello, {profile?.firstName}!
         </h1>
 
         <div>
@@ -100,6 +61,7 @@ const TeacherPage = async () => {
           {courses && courses.length > 0 ? (
             <div className="grid gap-4">
               {courses.map((course, index: number) => (
+                // TODO: Refactor this into a separate component
                 <div key={index} className="p-4 border rounded-lg">
                   <Link
                     href={`/courses/${course.id}`}
