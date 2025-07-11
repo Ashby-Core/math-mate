@@ -58,6 +58,17 @@ export async function signup(formData: FormData) {
       console.error("Error creating teacher record: ", teacherProfileError.message)
     }
   }
+  else if (userRole === 'student') {
+    // TODO: Add page for specifying student's grade level
+    const { error: studentProfileError } = await supabase.from('student_profiles').insert({
+      id: authData.user.id,
+      grade_level: null,
+    })
+
+    if (studentProfileError) {
+      console.error("Error creating student record: ", studentProfileError.message)
+    }
+  }
 
   console.log("User and profile created successfully!")
 
@@ -142,12 +153,14 @@ export async function createAssignment(formData: FormData, courseId: UUID) {
   
   const { error } = await supabase
     ?.from("assignments")
-    .insert({ course: courseId, 
+    .insert({ 
+      course: courseId, 
       title, 
       topics: topicsPlaintext.split(","), 
       due_date: dueDate, 
       min_questions: minQuestions, 
-      max_questions: maxQuestions });
+      max_questions: maxQuestions 
+    });
 
   if (error) {
     console.error("Error creating course");
