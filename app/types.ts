@@ -5,8 +5,6 @@ export type Profile = {
     firstName: string,
     lastName: string,
     username: string,
-    school?: string,
-    gradeLevel?: number,
 }
 
 export type Course = {

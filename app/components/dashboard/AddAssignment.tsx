@@ -88,6 +88,7 @@ const AddAssignment = ({ courseId, createAssignmentAction }: AddAssignmentProps)
               fullWidth
               variant="standard"
             ></TextField>
+            { /* TODO: Make this look prettier */ }
             <label htmlFor="minQuestions">Min Questions</label>
             <input id="minQuestions" name="minQuestions" type="number" />
             <label htmlFor="maxQuestions">Max Questions</label>
