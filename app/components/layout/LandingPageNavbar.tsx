@@ -1,9 +1,9 @@
-import React from 'react'
-import Logo from '../ui/Logo'
-import Navlink from '../ui/Navlink'
-import Button from '../ui/Button'
+import React from "react";
+import Logo from "../ui/Logo";
+import Navlink from "../ui/Navlink";
+import Button from "../ui/Button";
 
-const Navbar = () => {
+const LandingPageNavbar = () => {
   return (
     <nav className="bg-red-300 w-full flex justify-between items-center px-6 py-4">
       <div className="flex items-center gap-6">
@@ -13,11 +13,11 @@ const Navbar = () => {
       </div>
 
       <div className="flex items-center gap-4">
-        <Button text="Login" href='/login' />
-        <Button text="Sign Up" href='/signup' />
+        <Button text="Login" href="/login" />
+        <Button text="Sign Up" href="/signup" />
       </div>
     </nav>
-  )
-}
+  );
+};
 
-export default Navbar
+export default LandingPageNavbar;

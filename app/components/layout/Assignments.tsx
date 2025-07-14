@@ -1,5 +1,5 @@
 import React from "react";
-import AddAssignment from "./AddAssignment";
+import AddAssignment from "../ui/AddAssignment";
 import { Course } from "@/app/types";
 import { createClient } from "@/utils/supabase/server";
 import { createAssignment } from "@/app/actions/actions";

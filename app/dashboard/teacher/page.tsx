@@ -1,8 +1,8 @@
 import { createClient } from "@/utils/supabase/server";
-import Navbar from "@/app/components/dashboard/Navbar";
+import UserNavbar from "@/app/components/layout/UserNavbar";
 import { Course, Profile } from "@/app/types";
 import { redirect } from "next/navigation";
-import AddCourse from "@/app/components/dashboard/AddCourse";
+import AddCourse from "@/app/components/ui/AddCourse";
 import Link from "next/link";
 import { createCourse } from "@/app/actions/actions";
 
@@ -47,7 +47,7 @@ const TeacherPage = async () => {
 
   return (
     <div>
-      <Navbar></Navbar>
+      <UserNavbar></UserNavbar>
       <div className="p-6">
         <h1 className="text-4xl font-bold mb-4">
           Hello, {profile?.firstName}!

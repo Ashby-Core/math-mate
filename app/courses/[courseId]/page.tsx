@@ -1,6 +1,6 @@
-import Assignments from "@/app/components/dashboard/Assignments";
-import Navbar from "@/app/components/dashboard/Navbar";
-import Students from "@/app/components/dashboard/Students";
+import Assignments from "@/app/components/layout/Assignments";
+import UserNavbar from "@/app/components/layout/UserNavbar";
+import Students from "@/app/components/layout/Students";
 import { Course } from "@/app/types";
 import { createClient } from "@/utils/supabase/server";
 
@@ -49,7 +49,7 @@ export default async function CoursePage({
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Navbar />
+      <UserNavbar />
       {/* Header */}
       <div className="bg-white border-b">
         <div className="max-w-6xl mx-auto px-6 py-8">
