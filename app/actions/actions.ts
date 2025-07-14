@@ -97,6 +97,18 @@ export async function login(formData: FormData) {
   redirect('/dashboard')
 }
 
+export async function logout() {
+  const supabase = await createClient()
+
+  const { error } = await supabase.auth.signOut();
+
+  if (error) {
+    console.log(error);
+  }
+
+  redirect('/')
+}
+
 export async function createCourse(formData: FormData) {
   const generateCode = () => {
     const chars =

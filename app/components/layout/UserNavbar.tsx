@@ -1,7 +1,7 @@
 import React from "react";
 import Logo from "../ui/Logo";
 import Navlink from "../ui/Navlink";
-import Button from "../ui/Button";
+import Logout from "../ui/Logout";
 
 const UserNavbar = () => {
   return (
@@ -13,7 +13,7 @@ const UserNavbar = () => {
       </div>
 
       <div className="flex items-center gap-4">
-        <Button text="Log Out" href="/" />
+        <Logout />
       </div>
     </nav>
   );
