@@ -208,7 +208,7 @@ export async function enrollInCourse(formData: FormData) {
     .single();
 
   if (courseError) {
-    return { courseError: courseError.message };
+    return { error: courseError.message };
   }
 
   const { error } = await supabase.from("enrollments").insert({
