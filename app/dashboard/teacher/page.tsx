@@ -3,8 +3,8 @@ import UserNavbar from "@/app/components/layout/UserNavbar";
 import { Course, Profile } from "@/app/types";
 import { redirect } from "next/navigation";
 import AddCourse from "@/app/components/ui/AddCourse";
-import Link from "next/link";
 import { createCourse } from "@/app/actions/actions";
+import CourseCard from "@/app/components/ui/CourseCard";
 
 const TeacherPage = async () => {
   const supabase = await createClient();
@@ -20,7 +20,7 @@ const TeacherPage = async () => {
   const { data: profileData, error: profileError } = await supabase
     .from("profiles")
     .select("*")
-    .eq("id", user?.id)
+    .eq("id", user.id)
     .single();
 
   const { data: coursesData, error: coursesError } = await supabase
@@ -61,17 +61,7 @@ const TeacherPage = async () => {
           {courses && courses.length > 0 ? (
             <div className="grid gap-4">
               {courses.map((course, index: number) => (
-                // TODO: Refactor this into a separate component
-                <div key={index} className="p-4 border rounded-lg">
-                  <Link
-                    href={`/courses/${course.id}`}
-                    className="text-xl font-semibold text-red-700
-                  "
-                  >
-                    {course.name}
-                  </Link>
-                  <p className="text-gray-600">Code: {course.code}</p>
-                </div>
+                <CourseCard key={index} course={course} />
               ))}
             </div>
           ) : (
