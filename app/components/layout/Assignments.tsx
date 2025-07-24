@@ -6,9 +6,10 @@ import { createAssignment } from "@/app/actions/actions";
 
 interface AssignmentsProps {
   course: Course;
+  userIsTeacher: boolean;
 }
 
-const Assignments = async ({ course }: AssignmentsProps) => {
+const Assignments = async ({ course, userIsTeacher }: AssignmentsProps) => {
   const supabase = await createClient();
   const { data: assignments } = await supabase
     .from("assignments")
@@ -20,10 +21,14 @@ const Assignments = async ({ course }: AssignmentsProps) => {
         <div className="p-6 border-b">
           <div className="flex items-center justify-between">
             <h2 className="text-xl font-semibold text-gray-900">Assignments</h2>
-            <AddAssignment
-              courseId={course.id}
-              createAssignmentAction={createAssignment}
-            />
+            {userIsTeacher ? (
+              <AddAssignment
+                courseId={course.id}
+                createAssignmentAction={createAssignment}
+              />
+            ) : (
+              <></>
+            )}
           </div>
         </div>
 
