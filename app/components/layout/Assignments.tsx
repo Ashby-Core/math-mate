@@ -80,9 +80,13 @@ const Assignments = async ({ course, userIsTeacher }: AssignmentsProps) => {
                 </svg>
               </div>
               <p className="text-gray-500 text-sm">No assignments yet</p>
-              <p className="text-gray-400 text-xs mt-1">
-                Create your first assignment to get started
-              </p>
+              {userIsTeacher ? (
+                <p className="text-gray-400 text-xs mt-1">
+                  Create your first assignment to get started
+                </p>
+              ) : (
+                <></>
+              )}
             </div>
           )}
         </div>
