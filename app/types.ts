@@ -28,3 +28,10 @@ export type Enrollment = {
     student: UUID,
     course: UUID,
 }
+
+export type TopicMastery = {
+    name: string,
+    masteryScore: number,
+    problemsAttempted: number,
+    problemsCorrect: number,
+}

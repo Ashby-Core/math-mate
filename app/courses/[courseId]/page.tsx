@@ -4,7 +4,7 @@ import Students from "@/app/components/layout/Students";
 import { Course } from "@/app/types";
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
-import TopicMasteries from "@/app/components/ui/TopicMasteries";
+import TopicMasteriesChart from "@/app/components/ui/TopicMasteries";
 
 export default async function CoursePage({
   params,
@@ -25,7 +25,7 @@ export default async function CoursePage({
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("user_role")
+    .select("*")
     .eq("id", user.id)
     .single();
 
@@ -142,7 +142,11 @@ export default async function CoursePage({
             )}
           </div>
         </div>
-        <TopicMasteries />
+        {!userIsTeacher ? (
+          <TopicMasteriesChart studentId={profile?.id} courseId={course.id} />
+        ) : (
+          <></>
+        )}
       </div>
     </div>
   );
