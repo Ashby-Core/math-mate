@@ -17,10 +17,13 @@ export type Course = {
 
 export type Assignment = {
     id: UUID,
-    createdAt: Timestamp,
-    course: UUID,
+    courseId: UUID,
     title: string,
+    description: string,
     dueDate: Date,
+    difficulty: 'easy' | 'medium' | 'hard'
+    createdAt: Timestamp
+    // TODO: For gamification, add 'points', which will be of type number
 }
 
 export type Enrollment = {
@@ -34,4 +37,19 @@ export type TopicMastery = {
     masteryScore: number,
     problemsAttempted: number,
     problemsCorrect: number,
+}
+
+export type Topic = {
+    id: UUID,
+    courseId: UUID,
+    name: string,
+    orderIndex: number,
+    createdAt: Timestamp,
+}
+
+export type AssignmentTopic = {
+    id: UUID,
+    assignmentId: UUID,
+    topicId: UUID,
+    createdAt: Timestamp
 }
