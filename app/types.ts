@@ -56,6 +56,7 @@ export type AssignmentTopic = {
 
 interface MultipleChoiceProblem {
     id: UUID
+    type: 'multiple choice'
     problemNumber: number
     difficulty: 'easy' | 'medium' | 'hard'
     questionContent: string
@@ -65,6 +66,7 @@ interface MultipleChoiceProblem {
 
 interface OpenEndedProblem {
     id: UUID
+    type: 'open-ended'
     problemNumber: number
     difficulty: 'easy' | 'medium' | 'hard'
     questionContent: string
