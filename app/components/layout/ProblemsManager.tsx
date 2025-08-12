@@ -5,6 +5,7 @@ import { Button } from "@mui/material";
 import React, { useState } from "react";
 import MultipleChoiceProblemEdit from "./MultipleChoiceProblemEdit";
 import { UUID } from "crypto";
+import OpenEndedProblemEdit from "./OpenEndedProblemEdit";
 
 const createMultipleChoiceProblem = (): MultipleChoiceProblem => {
   return {
@@ -102,6 +103,26 @@ const ProblemsManager = () => {
     console.log(updatedProblems);
   };
 
+  const setNewCorrectAnswer = (
+    event: React.ChangeEvent<HTMLInputElement>,
+    id: UUID
+  ) => {
+    event.preventDefault();
+
+    const updatedProblems = problems.map((problem) => {
+      if (problem.id === id && problem.type === "open-ended") {
+        return {
+          ...problem,
+          correctAnswer: event.target.value,
+        };
+      }
+      return problem;
+    });
+
+    setProblems(updatedProblems);
+    console.log(updatedProblems);
+  };
+
   return (
     <div>
       <Button variant="contained">Generate with AI</Button>
@@ -125,7 +146,12 @@ const ProblemsManager = () => {
               setCorrectChoice={setNewCorrectChoice}
             />
           ) : (
-            <></>
+            <OpenEndedProblemEdit
+              key={index}
+              problem={problem}
+              setQuestionContent={setNewQuestionContent}
+              setCorrectAnswer={setNewCorrectAnswer}
+            />
           )
         )}
       </div>
