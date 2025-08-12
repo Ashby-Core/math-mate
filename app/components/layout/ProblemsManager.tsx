@@ -56,7 +56,6 @@ const ProblemsManager = () => {
     });
 
     setProblems(updatedProblems);
-    console.log(updatedProblems);
   };
 
   const setNewOption = (
@@ -80,7 +79,6 @@ const ProblemsManager = () => {
     });
 
     setProblems(updatedProblems);
-    console.log(updatedProblems);
   };
 
   const setNewCorrectChoice = (
@@ -100,7 +98,6 @@ const ProblemsManager = () => {
     });
 
     setProblems(updatedProblems);
-    console.log(updatedProblems);
   };
 
   const setNewCorrectAnswer = (
@@ -120,7 +117,6 @@ const ProblemsManager = () => {
     });
 
     setProblems(updatedProblems);
-    console.log(updatedProblems);
   };
 
   return (
