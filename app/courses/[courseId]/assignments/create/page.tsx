@@ -6,6 +6,7 @@ import { createClient } from "@/utils/supabase/client";
 import { Autocomplete, TextField } from "@mui/material";
 import { redirect } from "next/navigation";
 import React, { use, useEffect, useState } from "react";
+import ProblemsManager from "@/app/components/layout/ProblemsManager";
 
 export default function CreateAssignment({
   params,
@@ -91,6 +92,10 @@ export default function CreateAssignment({
 
         <label htmlFor="description">Description/Instructions</label>
         <textarea name="description" />
+      </div>
+      <div>
+        <h2>Problems</h2>
+        <ProblemsManager />
       </div>
     </div>
   );
