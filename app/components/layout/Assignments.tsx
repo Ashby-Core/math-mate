@@ -22,10 +22,7 @@ const Assignments = async ({ course, userIsTeacher }: AssignmentsProps) => {
           <div className="flex items-center justify-between">
             <h2 className="text-xl font-semibold text-gray-900">Assignments</h2>
             {userIsTeacher ? (
-              <AddAssignment
-                courseId={course.id}
-                createAssignmentAction={createAssignment}
-              />
+              <AddAssignment />
             ) : (
               <></>
             )}
