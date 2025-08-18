@@ -13,6 +13,11 @@ interface MultipleChoiceProblemEditProps {
     id: UUID,
     index: number
   ) => void;
+  addOption: (
+    event: React.MouseEvent<HTMLButtonElement, MouseEvent>,
+    id: UUID,
+    placeholderText: string
+  ) => void;
   setCorrectChoice: (
     event: React.ChangeEvent<HTMLInputElement>,
     id: UUID
@@ -23,6 +28,7 @@ const MultipleChoiceProblemEdit = ({
   problem,
   setQuestionContent,
   setOption,
+  addOption,
   setCorrectChoice,
 }: MultipleChoiceProblemEditProps) => {
   return (
@@ -35,9 +41,9 @@ const MultipleChoiceProblemEdit = ({
             <span className="text-sm font-medium text-gray-700">Multiple Choice</span>
           </div>
           <div className="h-4 w-px bg-gray-300"></div>
-          <select className="text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500">
+          <select defaultValue="medium" className="text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500">
             <option value="easy">Easy</option>
-            <option value="medium" selected>Medium</option>
+            <option value="medium">Medium</option>
             <option value="hard">Hard</option>
           </select>
         </div>
@@ -55,7 +61,7 @@ const MultipleChoiceProblemEdit = ({
           
           <div className="relative">
             <textarea
-              value={problem.questionContent}
+              defaultValue={problem.questionContent}
               onChange={(event) => setQuestionContent(event, problem.id)}
               className="w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500 resize-none"
               placeholder="Enter your question here... (e.g., What is 2 + 2?)"
@@ -115,7 +121,7 @@ const MultipleChoiceProblemEdit = ({
                 {/* Option Input */}
                 <input
                   type="text"
-                  value={option}
+                  defaultValue={option}
                   onChange={(event) => setOption(event, problem.id, index)}
                   className={`flex-1 px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500 ${
                     index === problem.correctChoiceIndex
@@ -131,7 +137,7 @@ const MultipleChoiceProblemEdit = ({
                     type="radio"
                     checked={index === problem.correctChoiceIndex}
                     onChange={(event) => setCorrectChoice(event, problem.id)}
-                    value={index}
+                    defaultValue={index}
                     name={`correct-choice-${problem.id}`}
                     className="w-5 h-5 text-green-600 border-2 border-gray-300 focus:ring-green-500 focus:ring-2"
                   />
@@ -147,10 +153,7 @@ const MultipleChoiceProblemEdit = ({
           <div className="flex gap-2 pt-2">
             <button 
               className="text-red-600 hover:text-red-700 text-sm font-medium flex items-center gap-1 px-3 py-1 rounded hover:bg-red-50 transition-colors"
-              onClick={() => {
-                // TODO: Add option functionality
-                console.log('Add option clicked')
-              }}
+              onClick={(event) => addOption(event, problem.id, `Option ${String.fromCharCode(65 + problem.options.length)}`)}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
