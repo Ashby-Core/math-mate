@@ -32,9 +32,9 @@ const OpenEndedProblemEdit = ({
             <span className="text-sm font-medium text-gray-700">Open-Ended</span>
           </div>
           <div className="h-4 w-px bg-gray-300"></div>
-          <select className="text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+          <select value={problem.difficulty} className="text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
             <option value="easy">Easy</option>
-            <option value="medium" selected>Medium</option>
+            <option value="medium">Medium</option>
             <option value="hard">Hard</option>
           </select>
         </div>
