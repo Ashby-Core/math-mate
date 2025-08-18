@@ -84,8 +84,6 @@ const ProblemsManager = () => {
     event: React.ChangeEvent<HTMLInputElement>,
     id: UUID
   ) => {
-    event.preventDefault();
-
     const updatedProblems = problems.map((problem) => {
       if (problem.id === id && problem.type === "multiple choice") {
         return {
@@ -123,7 +121,6 @@ const ProblemsManager = () => {
     });
 
     setProblems(updatedProblems);
-    console.log(updatedProblems)
   }
 
   const setNewCorrectAnswer = (
