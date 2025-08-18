@@ -112,6 +112,20 @@ const ProblemsManager = () => {
     setProblems(updatedProblems);
   }
 
+  const removeOption = (event: React.MouseEvent<HTMLButtonElement, MouseEvent>, id: UUID) => {
+    event.preventDefault();
+
+    const updatedProblems = problems.map((problem) => {
+      if (problem.id === id && problem.type === "multiple choice") {
+        problem.options.pop()
+      }
+      return problem;
+    });
+
+    setProblems(updatedProblems);
+    console.log(updatedProblems)
+  }
+
   const setNewCorrectAnswer = (
     event: React.ChangeEvent<HTMLInputElement>,
     id: UUID
@@ -332,6 +346,7 @@ const ProblemsManager = () => {
                       setQuestionContent={setNewQuestionContent}
                       setOption={setNewOption}
                       addOption={addOption}
+                      removeOption={removeOption}
                       setCorrectChoice={setNewCorrectChoice}
                       key={0}
                     />

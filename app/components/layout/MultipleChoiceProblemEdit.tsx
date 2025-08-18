@@ -18,6 +18,10 @@ interface MultipleChoiceProblemEditProps {
     id: UUID,
     placeholderText: string
   ) => void;
+  removeOption: (
+    event: React.MouseEvent<HTMLButtonElement, MouseEvent>,
+    id: UUID,
+  ) => void;
   setCorrectChoice: (
     event: React.ChangeEvent<HTMLInputElement>,
     id: UUID
@@ -29,6 +33,7 @@ const MultipleChoiceProblemEdit = ({
   setQuestionContent,
   setOption,
   addOption,
+  removeOption,
   setCorrectChoice,
 }: MultipleChoiceProblemEditProps) => {
   return (
@@ -164,10 +169,7 @@ const MultipleChoiceProblemEdit = ({
             {problem.options.length > 2 && (
               <button 
                 className="text-gray-600 hover:text-gray-700 text-sm font-medium flex items-center gap-1 px-3 py-1 rounded hover:bg-gray-50 transition-colors"
-                onClick={() => {
-                  // TODO: Remove option functionality
-                  console.log('Remove option clicked')
-                }}
+                onClick={(event) => removeOption(event, problem.id)}
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
