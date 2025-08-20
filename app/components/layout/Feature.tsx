@@ -9,9 +9,16 @@ interface FeatureProps {
 
 const Feature = ({ title, description, imageOnRight }: FeatureProps) => {
   return (
-    <div className={`flex flex-${imageOnRight ? "row" : "row-reverse"} justify-center px-6 py-12 gap-40`}>
+    <div
+      className={"flex justify-center px-6 py-12 gap-16"}
+      style={
+        imageOnRight
+          ? { flexDirection: "row" }
+          : { flexDirection: "row-reverse" }
+      }
+    >
       <div>
-        <h3 className="text-2xl">{title}</h3>
+        <h3 className="text-2xl max-w-">{title}</h3>
         <p>{description}</p>
       </div>
       <div>

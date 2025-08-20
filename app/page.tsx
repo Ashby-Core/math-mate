@@ -12,7 +12,7 @@ export default function Home() {
           <h1 className="text-6xl font-bold mb-6">
             A Simpler, Personalized, Fun Way to Learn
           </h1>
-          <Button className="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 hover:cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors">
+          <Button className="py-2 px-4 rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 hover:cursor-pointer transition-colors">
             Learn More
           </Button>
         </div>
@@ -27,7 +27,6 @@ export default function Home() {
         </div>
       </div>
       <div>
-        <h2 className="text-3xl text-center font-semibold">Features</h2>
         <Feature
           title="Create assignments and track student progress"
           description="Mi tincidunt elit, id quisque ligula ac diam, amet. Vel etiam suspendisse morbi eleifend faucibus eget vestibulum felis. Dictum quis montes, sit sit. Tellus aliquam enim urna, etiam. Mauris posuere vulputate arcu amet, vitae nisi, tellus tincidunt. At feugiat sapien varius id."
