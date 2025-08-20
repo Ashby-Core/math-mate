@@ -1,6 +1,6 @@
-import FormButton from "../components/ui/FormButton";
 import TextInput from "../components/ui/TextInput";
 import { login } from "../actions/actions";
+import { Button } from "@mui/material";
 
 export default function LoginPage() {
   return (
@@ -10,7 +10,7 @@ export default function LoginPage() {
           <h2 className="text-3xl font-bold text-gray-900">Welcome back!</h2>
           <p className="mt-2 text-sm text-gray-600">Log in to your account</p>
         </div>
-        <form className="mt-8 space-y-6">
+        <form action={login} className="mt-8 space-y-6">
           <div className="space-y-4">
             <TextInput
               labelText="Email"
@@ -25,7 +25,12 @@ export default function LoginPage() {
               placeholder="Enter your password"
             />
           </div>
-          <FormButton text="Log In" formAction={login} />
+          <Button
+            type="submit"
+            className="w-full flex justify-center py-2 px-4 rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 hover:cursor-pointer transition-colors"
+          >
+            Log In
+          </Button>
           <div className="text-center">
             <p className="text-sm text-gray-600">
               Don&apos;t have an account?{" "}
