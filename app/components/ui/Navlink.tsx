@@ -7,7 +7,7 @@ interface NavlinkProps {
 
 const Navlink = ({ text, href }: NavlinkProps) => {
   return (
-    <a className='transition duration-500 hover:text-red-700 hover:cursor-pointer' href={href}>{text}</a>
+    <a className='text-gray-600 transition duration-500 hover:text-red-700 hover:cursor-pointer font-semibold' href={href}>{text}</a>
   )
 }
 
