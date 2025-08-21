@@ -28,7 +28,8 @@ export async function signup(formData: FormData) {
   }
 
   if (!authData.user) {
-    return { error: "Failed to create user" };
+    console.error('Failed to create user')
+    redirect('/error')
   }
 
   // Create profile record
@@ -47,7 +48,8 @@ export async function signup(formData: FormData) {
 
   if (profileError) {
     await supabase.auth.admin.deleteUser(authData.user.id);
-    return { error: "Failed to create profile: " + profileError.message };
+    console.error(profileError)
+    redirect('/error')
   }
 
   if (userRole === "teacher") {
