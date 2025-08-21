@@ -5,6 +5,8 @@ import { redirect } from "next/navigation";
 import AddCourse from "@/app/components/ui/AddCourse";
 import { createCourse } from "@/app/actions/actions";
 import CourseCard from "@/app/components/ui/CourseCard";
+import { Divider } from "@mui/material";
+import AssignmentListItem from "@/app/components/ui/AssignmentListItem";
 
 const TeacherPage = async () => {
   const supabase = await createClient();
@@ -47,26 +49,32 @@ const TeacherPage = async () => {
 
   return (
     <div>
-      <UserNavbar></UserNavbar>
-      <div className="p-6">
-        <h1 className="text-4xl font-bold mb-4">
-          Hello, {profile?.firstName}!
-        </h1>
-
-        <div>
-          <div className="flex mb-3">
-            <h2 className="text-2xl font-semibold pr-3">Your Courses</h2>
-            <AddCourse createCourseAction={createCourse}></AddCourse>
-          </div>
-          {courses && courses.length > 0 ? (
-            <div className="grid gap-4">
-              {courses.map((course, index: number) => (
-                <CourseCard key={index} course={course} />
-              ))}
+      <UserNavbar />
+      <div className="flex p-6 gap-24">
+        <div className="w-[60%]">
+          <h1 className="text-4xl font-bold mb-4">
+            Hello, {profile?.firstName}!
+          </h1>
+          <div>
+            <div className="flex mb-3">
+              <h2 className="text-2xl font-semibold pr-3">Your Courses</h2>
+              <AddCourse createCourseAction={createCourse} />
             </div>
-          ) : (
-            <p className="text-gray-500">No courses found.</p>
-          )}
+            {courses && courses.length > 0 ? (
+              <div className="flex flex-col gap-4">
+                {courses.map((course, index) => (
+                  <CourseCard key={index} course={course} />
+                ))}
+              </div>
+            ) : (
+              <p className="text-gray-500">No courses found.</p>
+            )}
+          </div>
+        </div>
+        <div className="flex-grow">
+          <h3 className="mb-1 text-md font-medium">Active Assignments</h3>
+          <Divider className="w-full" />
+          {/* TODO: Include AssignmentListItem component */}
         </div>
       </div>
     </div>

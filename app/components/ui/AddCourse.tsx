@@ -45,7 +45,10 @@ const AddCourse = ({ createCourseAction }: AddCourseProps) => {
 
   return (
     <div>
-      <Button variant="outlined" onClick={handleOpen}>
+      <Button
+        className="text-orange-400 border border-orange-200 px-3 font-semibold hover:bg-orange-50 rounded-xl shadow-xs"
+        onClick={handleOpen}
+      >
         + Add Course
       </Button>
       <Dialog open={createCourseModalOpen} onClose={handleClose}>
@@ -59,13 +62,14 @@ const AddCourse = ({ createCourseAction }: AddCourseProps) => {
               id="courseName"
               name="courseName"
               label="New course name"
+              color="error"
               type="text"
               fullWidth
               variant="standard"
             ></TextField>
             <DialogActions>
-              <Button onClick={handleClose}>Cancel</Button>
-              <Button type="submit">Create course</Button>
+              <Button color="error" onClick={handleClose}>Cancel</Button>
+              <Button color="error" type="submit">Create course</Button>
             </DialogActions>
           </form>
         </DialogContent>
