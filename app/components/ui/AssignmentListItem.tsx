@@ -1,29 +1,30 @@
-import { Assignment } from "@/app/types";
 import { Badge } from "@mui/material";
 import Link from "next/link";
 import React from "react";
 
 interface AssignmentListItemProps {
-  badgeContent: number;
-  assignment: Assignment;
+  title: string;
   courseName: string;
+  dueDate: Date;
+  submissionCount: number;
 }
 
 const AssignmentListItem = ({
-  badgeContent,
-  assignment,
+  title,
   courseName,
+  dueDate,
+  submissionCount,
 }: AssignmentListItemProps) => {
   return (
     <div className="flex">
-      <Badge badgeContent={badgeContent} color="error" />
+      <Badge badgeContent={submissionCount} color="error" />
       <div>
         <Link className="hover:underline" href="">
-          {assignment.title} ({courseName})
+          {title} ({courseName})
         </Link>
         <p>
           Due:{" "}
-          {assignment.dueDate.toLocaleDateString(undefined, {
+          {dueDate.toLocaleDateString(undefined, {
             month: "short",
             day: "numeric",
             timeStyle: "medium",
