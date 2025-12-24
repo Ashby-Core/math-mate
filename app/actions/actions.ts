@@ -186,7 +186,7 @@ export async function createAssignment(formData: FormData, courseId: UUID) {
   });
 
   if (error) {
-    console.error("Error creating course");
+    console.error("Error creating assignment");
     return { error: error.message };
   }
 

@@ -1,6 +1,6 @@
 import { Problem } from "@/app/types";
 import { UUID } from "crypto";
-import React, { useState } from "react";
+import React from "react";
 import HelpIcon from "@mui/icons-material/Help";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 
@@ -11,7 +11,7 @@ interface ProblemEditProps {
     id: UUID
   ) => void;
   setCorrectAnswer: (
-    event: React.ChangeEvent<HTMLInputElement>,
+    event: React.ChangeEvent<HTMLTextAreaElement>,
     id: UUID
   ) => void;
 }
@@ -52,7 +52,7 @@ const ProblemEdit = ({
         <div className="relative">
           <textarea
             value={problem.correctAnswer}
-            onChange={(event) => setCorrectAnswer(event as any, problem.id)}
+            onChange={(event) => setCorrectAnswer(event, problem.id)}
             className="w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
             placeholder="Enter the expected answer or key points..."
             rows={3}

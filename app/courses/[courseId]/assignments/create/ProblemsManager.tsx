@@ -1,18 +1,26 @@
 "use client";
 
-import { Problem } from "@/app/types";
+import { Problem, Topic } from "@/app/types";
 import React, { useState } from "react";
 import { UUID } from "crypto";
-import LightbulbIcon from "@mui/icons-material/Lightbulb";
 import EditIcon from "@mui/icons-material/Edit";
-import DescriptionIcon from '@mui/icons-material/Description';
-import DeleteIcon from '@mui/icons-material/Delete';
-import ClearIcon from '@mui/icons-material/Clear';
+import DescriptionIcon from "@mui/icons-material/Description";
+import DeleteIcon from "@mui/icons-material/Delete";
+import ClearIcon from "@mui/icons-material/Clear";
 import ProblemEdit from "./ProblemEdit";
+import GenerateAIProblems from "./GenerateAIProblems";
 
-const ProblemsManager = () => {
-  const [problems, setProblems] = useState<Problem[]>([]);
+interface ProblemsManagerProps {
+  topics: Topic[];
+  problems: Problem[];
+  setProblems: React.Dispatch<React.SetStateAction<Problem[]>>;
+}
 
+const ProblemsManager = ({
+  topics,
+  problems,
+  setProblems,
+}: ProblemsManagerProps) => {
   const createProblem = (): Problem => {
     return {
       id: crypto.randomUUID() as UUID,
@@ -45,7 +53,7 @@ const ProblemsManager = () => {
   };
 
   const setNewCorrectAnswer = (
-    event: React.ChangeEvent<HTMLInputElement>,
+    event: React.ChangeEvent<HTMLTextAreaElement>,
     id: UUID
   ) => {
     event.preventDefault();
@@ -71,11 +79,13 @@ const ProblemsManager = () => {
     <div className="space-y-6">
       {/* Action Buttons */}
       <div className="flex gap-3 justify-center">
-        <button className="bg-gradient-to-r from-purple-600 to-blue-600 text-white py-3 px-6 rounded-lg hover:from-purple-700 hover:to-blue-700 transition-all duration-200 font-medium shadow-md flex items-center justify-center gap-2 w-1/2">
-          <LightbulbIcon />
-          Generate with AI
-        </button>
+        <GenerateAIProblems
+          topics={topics}
+          problems={problems}
+          setProblems={setProblems}
+        />
         <button
+          type="button"
           onClick={handleAddProblem}
           className="bg-white border-2 border-red-600 text-red-600 py-3 px-6 rounded-lg hover:bg-red-50 transition-colors font-medium shadow-sm flex items-center justify-center gap-2 w-1/2"
         >
@@ -99,6 +109,7 @@ const ProblemsManager = () => {
             </p>
             <div className="flex justify-center gap-3">
               <button
+                type="button"
                 onClick={handleAddProblem}
                 className="border border-red-600 text-red-600 py-2 px-4 rounded-md hover:bg-red-50 transition-colors font-medium text-sm"
               >
@@ -118,6 +129,7 @@ const ProblemsManager = () => {
 
               {problems.length > 0 && (
                 <button
+                  type="button"
                   onClick={() => setProblems([])}
                   className="text-red-600 hover:text-red-700 text-sm font-medium flex items-center gap-1"
                 >
@@ -141,6 +153,7 @@ const ProblemsManager = () => {
 
                 {/* Delete Button */}
                 <button
+                  type="button"
                   onClick={() => deleteProblem(problem.id)}
                   className="absolute -right-3 top-6 z-10 w-8 h-8 bg-red-100 hover:bg-red-200 text-red-600 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 shadow-sm"
                   title="Delete problem"
