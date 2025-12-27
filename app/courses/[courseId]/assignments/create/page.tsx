@@ -79,7 +79,6 @@ export default function CreateAssignment({
     } else {
       // Handle error
       alert("Error creating assignment")
-      console.error(result.error);
     }
   };
 
