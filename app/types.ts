@@ -54,21 +54,8 @@ export type AssignmentTopic = {
     createdAt: Timestamp
 }
 
-export interface MultipleChoiceProblem {
+export interface Problem {
     id: UUID
-    type: 'multiple choice'
-    difficulty: 'easy' | 'medium' | 'hard'
-    questionContent: string
-    options: string[]
-    correctChoiceIndex: number
-}
-
-export interface OpenEndedProblem {
-    id: UUID
-    type: 'open-ended'
-    difficulty: 'easy' | 'medium' | 'hard'
     questionContent: string
     correctAnswer: string
 }
-
-export type Problem = MultipleChoiceProblem | OpenEndedProblem
