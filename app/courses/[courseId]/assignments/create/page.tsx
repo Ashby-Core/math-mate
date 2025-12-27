@@ -70,18 +70,17 @@ export default function CreateAssignment({
     formData.append("problems", JSON.stringify(problems));
 
     // Call the server action
-    // const result = await createAssignment(formData, courseId as UUID);
-    console.log(Object.fromEntries(formData.entries()))
+    const result = await createAssignment(formData, courseId as UUID);
 
-    /*
     if (result.success) {
       // Redirect or show success message
+      console.log("Assignment created successfully!")
       redirect(`/courses/${courseId}`);
     } else {
       // Handle error
+      alert("Error creating assignment")
       console.error(result.error);
     }
-    */
   };
 
   return (

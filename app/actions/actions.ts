@@ -5,6 +5,8 @@ import { redirect } from "next/navigation";
 
 import { createClient } from "@/utils/supabase/server";
 import { UUID } from "crypto";
+import { SupabaseClient } from "@supabase/supabase-js";
+import { Problem } from "../types";
 
 export async function signup(formData: FormData) {
   const supabase = await createClient();
@@ -28,8 +30,8 @@ export async function signup(formData: FormData) {
   }
 
   if (!authData.user) {
-    console.error('Failed to create user')
-    redirect('/error')
+    console.error("Failed to create user");
+    redirect("/error");
   }
 
   // Create profile record
@@ -48,8 +50,8 @@ export async function signup(formData: FormData) {
 
   if (profileError) {
     await supabase.auth.admin.deleteUser(authData.user.id);
-    console.error(profileError)
-    redirect('/error')
+    console.error(profileError);
+    redirect("/error");
   }
 
   if (userRole === "teacher") {
@@ -160,6 +162,61 @@ export async function createCourse(formData: FormData) {
   return { success: true };
 }
 
+async function insertAssignment(supabase: SupabaseClient, assignmentId: string, courseId: UUID, formData: FormData) {
+  const { error } = await supabase
+    .from("assignments")
+    .insert({
+      id: assignmentId,
+      course: courseId,
+      title: formData.get("title"),
+      due_date: formData.get("dueDate"),
+      description: formData.get("description"),
+    });
+
+  if (error) {
+    console.error(error);
+    return { error: error.message };
+  }
+
+  return { success: true };
+}
+
+async function insertAssignmentTopics(supabase: SupabaseClient, assignmentId: string, topics: string[]) {
+  for (const topicId of topics) {
+    const { error } = await supabase
+      .from("assignment_topics")
+      .insert({
+        assignment_id: assignmentId,
+        topic_id: topicId
+      });
+    
+    if (error) {
+      console.error(error);
+      return { error: error.message };
+    }
+  }
+
+  return { success: true };
+}
+
+async function insertAssignmentProblems(supabase: SupabaseClient, assignmentId: string, problems: Problem[]) {
+  for (const problem of problems) {
+    const { error } = await supabase.from("assignment_problems").insert({
+      id: problem.id,
+      assignment_id: assignmentId,
+      question_content: problem.questionContent,
+      correct_answer: problem.correctAnswer
+    });
+
+    if (error) {
+      console.error(error);
+      return { error: error.message };
+    }
+  }
+
+  return { success: true };
+}
+
 export async function createAssignment(formData: FormData, courseId: UUID) {
   const supabase = await createClient();
   const {
@@ -170,24 +227,26 @@ export async function createAssignment(formData: FormData, courseId: UUID) {
     redirect("/login");
   }
 
-  const title = formData.get("title") as string;
-  const topicsPlaintext = formData.get("topics") as string;
-  const dueDate = formData.get("dueDate");
-  const minQuestions = formData.get("minQuestions");
-  const maxQuestions = formData.get("maxQuestions");
+  const assignmentId = crypto.randomUUID();
 
-  const { error } = await supabase?.from("assignments").insert({
-    course: courseId,
-    title,
-    topics: topicsPlaintext.split(","),
-    due_date: dueDate,
-    min_questions: minQuestions,
-    max_questions: maxQuestions,
-  });
+  // Insert into assignments
+  const assignmentResult = await insertAssignment(supabase, assignmentId, courseId, formData);
+  if (assignmentResult.error) {
+    return assignmentResult;
+  }
 
-  if (error) {
-    console.error("Error creating assignment");
-    return { error: error.message };
+  // Insert into assignment_topics
+  const topics = (formData.get("topics") as string).split(",");
+  const topicsResult = await insertAssignmentTopics(supabase, assignmentId, topics);
+  if (topicsResult.error) {
+    return topicsResult;
+  }
+
+  // Insert into assignment_problems
+  const problems = JSON.parse(formData.get("problems") as string);
+  const problemsResult = await insertAssignmentProblems(supabase, assignmentId, problems);
+  if (problemsResult.error) {
+    return problemsResult;
   }
 
   return { success: true };
