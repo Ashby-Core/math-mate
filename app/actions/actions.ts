@@ -8,6 +8,10 @@ import { UUID } from "crypto";
 import { SupabaseClient } from "@supabase/supabase-js";
 import { Problem } from "../types";
 
+/**
+ * Creates a new user in the database using the given form data
+ * @param formData the data about the new user to create
+ */
 export async function signup(formData: FormData) {
   const supabase = await createClient();
 
@@ -91,6 +95,10 @@ export async function signup(formData: FormData) {
   redirect("/dashboard");
 }
 
+/**
+ * Logs a user in using the provided email and password from the form data
+ * @param formData the data containing the user's email and password
+ */
 export async function login(formData: FormData) {
   const supabase = await createClient();
 
@@ -124,6 +132,12 @@ export async function logout() {
   redirect("/");
 }
 
+/**
+ * Creates a new course with the provided name and a unique code
+ * @param formData the form data containing the name of the course to create
+ * @returns an object that either contains an error message if the course cannot be created, or an indicator that the course has been
+ *          successfully created
+ */
 export async function createCourse(formData: FormData) {
   const generateCode = () => {
     const chars =
@@ -162,16 +176,19 @@ export async function createCourse(formData: FormData) {
   return { success: true };
 }
 
-async function insertAssignment(supabase: SupabaseClient, assignmentId: string, courseId: UUID, formData: FormData) {
-  const { error } = await supabase
-    .from("assignments")
-    .insert({
-      id: assignmentId,
-      course: courseId,
-      title: formData.get("title"),
-      due_date: formData.get("dueDate"),
-      description: formData.get("description"),
-    });
+async function insertAssignment(
+  supabase: SupabaseClient,
+  assignmentId: string,
+  courseId: UUID,
+  formData: FormData
+) {
+  const { error } = await supabase.from("assignments").insert({
+    id: assignmentId,
+    course: courseId,
+    title: formData.get("title"),
+    due_date: formData.get("dueDate"),
+    description: formData.get("description"),
+  });
 
   if (error) {
     console.error(error);
@@ -181,31 +198,15 @@ async function insertAssignment(supabase: SupabaseClient, assignmentId: string, 
   return { success: true };
 }
 
-async function insertAssignmentTopics(supabase: SupabaseClient, assignmentId: string, topics: string[]) {
+async function insertAssignmentTopics(
+  supabase: SupabaseClient,
+  assignmentId: string,
+  topics: string[]
+) {
   for (const topicId of topics) {
-    const { error } = await supabase
-      .from("assignment_topics")
-      .insert({
-        assignment_id: assignmentId,
-        topic_id: topicId
-      });
-    
-    if (error) {
-      console.error(error);
-      return { error: error.message };
-    }
-  }
-
-  return { success: true };
-}
-
-async function insertAssignmentProblems(supabase: SupabaseClient, assignmentId: string, problems: Problem[]) {
-  for (const problem of problems) {
-    const { error } = await supabase.from("assignment_problems").insert({
-      id: problem.id,
+    const { error } = await supabase.from("assignment_topics").insert({
       assignment_id: assignmentId,
-      question_content: problem.questionContent,
-      correct_answer: problem.correctAnswer
+      topic_id: topicId,
     });
 
     if (error) {
@@ -217,6 +218,36 @@ async function insertAssignmentProblems(supabase: SupabaseClient, assignmentId: 
   return { success: true };
 }
 
+async function insertAssignmentProblems(
+  supabase: SupabaseClient,
+  assignmentId: string,
+  problems: Problem[]
+) {
+  for (const problem of problems) {
+    const { error } = await supabase.from("assignment_problems").insert({
+      id: problem.id,
+      assignment_id: assignmentId,
+      question_content: problem.questionContent,
+      correct_answer: problem.correctAnswer,
+    });
+
+    if (error) {
+      console.error(error);
+      return { error: error.message };
+    }
+  }
+
+  return { success: true };
+}
+
+/**
+ * Creates a new assignment with the given data and course it is a part of
+ * @param formData the data containing information about the assignment, including
+ *                 its name, due date, description, topics, and problems
+ * @param courseId the id of the course the assignment is a part of
+ * @returns an object that either contains an error message if the course cannot be created, or an indicator that the course has been
+ *          successfully created
+ */
 export async function createAssignment(formData: FormData, courseId: UUID) {
   const supabase = await createClient();
   const {
@@ -230,21 +261,34 @@ export async function createAssignment(formData: FormData, courseId: UUID) {
   const assignmentId = crypto.randomUUID();
 
   // Insert into assignments
-  const assignmentResult = await insertAssignment(supabase, assignmentId, courseId, formData);
+  const assignmentResult = await insertAssignment(
+    supabase,
+    assignmentId,
+    courseId,
+    formData
+  );
   if (assignmentResult.error) {
     return assignmentResult;
   }
 
   // Insert into assignment_topics
   const topics = (formData.get("topics") as string).split(",");
-  const topicsResult = await insertAssignmentTopics(supabase, assignmentId, topics);
+  const topicsResult = await insertAssignmentTopics(
+    supabase,
+    assignmentId,
+    topics
+  );
   if (topicsResult.error) {
     return topicsResult;
   }
 
   // Insert into assignment_problems
   const problems = JSON.parse(formData.get("problems") as string);
-  const problemsResult = await insertAssignmentProblems(supabase, assignmentId, problems);
+  const problemsResult = await insertAssignmentProblems(
+    supabase,
+    assignmentId,
+    problems
+  );
   if (problemsResult.error) {
     return problemsResult;
   }
@@ -252,6 +296,12 @@ export async function createAssignment(formData: FormData, courseId: UUID) {
   return { success: true };
 }
 
+/**
+ * Enrolls the currently logged-in user (student) into the course with the provided code
+ * @param formData the data containing the code of the course to enroll in
+ * @returns an object that either contains an error message if the course cannot be created, or an indicator that the course has been
+ *          successfully created
+ */
 export async function enrollInCourse(formData: FormData) {
   const supabase = await createClient();
   const {
