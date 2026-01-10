@@ -62,22 +62,17 @@ export default function CreateAssignment({
 
     const formData = new FormData(e.currentTarget);
 
-    // Add topics as comma-separated string
     const topicsString = selectedTopics.map((t) => t.id).join(",");
     formData.append("topics", topicsString);
 
-    // Add problems as JSON string
     formData.append("problems", JSON.stringify(problems));
 
-    // Call the server action
     const result = await createAssignment(formData, courseId as UUID);
 
     if (result.success) {
-      // Redirect or show success message
       console.log("Assignment created successfully!")
       redirect(`/courses/${courseId}`);
     } else {
-      // Handle error
       alert("Error creating assignment")
     }
   };
