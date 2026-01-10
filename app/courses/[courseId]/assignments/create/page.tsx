@@ -259,6 +259,7 @@ export default function CreateAssignment({
                 <button
                   type="button"
                   className="w-full text-gray-500 py-2 px-4 hover:text-gray-700 transition-colors text-sm"
+                  onClick={() => redirect(`/courses/${courseId}`)}
                 >
                   Cancel
                 </button>
