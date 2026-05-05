@@ -16,20 +16,7 @@ const StudentPage = async () => {
     const courses: Course[] = [];
 
     for (let i = 0; i < enrollmentsData.length; i += 1) {
-      const currCourseId = enrollmentsData[i].course_id;
-      const { data: currCourse } = await supabase
-        .from("courses")
-        .select("*")
-        .eq("id", currCourseId)
-        .single();
-
-      courses.push({
-        id: currCourseId,
-        createdAt: currCourse.created_at,
-        teacher: currCourse.teacher,
-        name: currCourse.name,
-        code: currCourse.code,
-      });
+      courses.push(enrollmentsData[i].courses)
     }
 
     return courses;
@@ -50,7 +37,7 @@ const StudentPage = async () => {
     .single();
   const { data: enrollmentsData, error: enrollmentsError } = await supabase
     .from("enrollments")
-    .select("*")
+    .select("*, courses(*)")
     .eq("student_id", user.id);
 
   if (profileError) {
