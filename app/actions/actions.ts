@@ -135,8 +135,6 @@ export async function logout() {
 /**
  * Creates a new course with the provided name and a unique code
  * @param formData the form data containing the name of the course to create
- * @returns an object that either contains an error message if the course cannot be created, or an indicator that the course has been
- *          successfully created
  */
 export async function createCourse(formData: FormData) {
   const generateCode = () => {
@@ -170,10 +168,7 @@ export async function createCourse(formData: FormData) {
 
   if (error) {
     console.error("Error creating course");
-    return { error: error.message };
   }
-
-  return { success: true };
 }
 
 async function insertAssignment(
