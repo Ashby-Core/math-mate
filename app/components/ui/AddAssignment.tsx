@@ -1,6 +1,6 @@
 "use client";
 
-import { Button } from "@mui/material";
+import { Button } from "@/components/ui/button";
 import React from "react";
 import { useRouter, usePathname } from "next/navigation";
 
@@ -14,7 +14,7 @@ const AddAssignment = () => {
 
   return (
     <div>
-      <Button variant="outlined" onClick={handleAppendSegment}>
+      <Button variant="outline" onClick={handleAppendSegment}>
         + Add Assignment
       </Button>
     </div>
