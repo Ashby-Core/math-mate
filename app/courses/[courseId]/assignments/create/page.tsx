@@ -3,12 +3,31 @@
 import UserNavbar from "@/app/components/layout/UserNavbar";
 import { Topic, Problem } from "@/app/types";
 import { createClient } from "@/utils/supabase/client";
-import { Autocomplete, TextField } from "@mui/material";
 import { redirect } from "next/navigation";
 import React, { use, useEffect, useState } from "react";
 import ProblemsManager from "@/app/courses/[courseId]/assignments/create/ProblemsManager";
 import { createAssignment } from "@/app/actions/actions";
 import { UUID } from "crypto";
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Button } from "@/components/ui/button";
+import {
+  Combobox,
+  ComboboxChips,
+  ComboboxChip,
+  ComboboxChipsInput,
+  ComboboxValue,
+  ComboboxContent,
+  ComboboxList,
+  ComboboxItem,
+} from "@/components/ui/combobox";
 
 export default function CreateAssignment({
   params,
@@ -70,10 +89,10 @@ export default function CreateAssignment({
     const result = await createAssignment(formData, courseId as UUID);
 
     if (result.success) {
-      console.log("Assignment created successfully!")
+      console.log("Assignment created successfully!");
       redirect(`/courses/${courseId}`);
     } else {
-      alert("Error creating assignment")
+      alert("Error creating assignment");
     }
   };
 
@@ -104,17 +123,15 @@ export default function CreateAssignment({
             {/* Assignment Details - Left Column */}
             <div className="xl:col-span-2 space-y-8">
               {/* Basic Details Card */}
-              <div className="bg-white rounded-lg shadow-sm border">
-                <div className="p-6 border-b">
-                  <h2 className="text-xl font-semibold text-gray-900">
-                    Assignment Details
-                  </h2>
-                  <p className="text-gray-600 text-sm mt-1">
+              <Card>
+                <CardHeader className="border-b">
+                  <CardTitle className="text-xl">Assignment Details</CardTitle>
+                  <CardDescription>
                     Basic information about your assignment
-                  </p>
-                </div>
+                  </CardDescription>
+                </CardHeader>
 
-                <div className="p-6 space-y-6">
+                <CardContent className="space-y-6">
                   {/* Title */}
                   <div>
                     <label
@@ -123,15 +140,16 @@ export default function CreateAssignment({
                     >
                       Title <span className="text-red-500">*</span>
                     </label>
-                    <input
+                    <Input
                       type="text"
                       name="title"
                       id="title"
                       required
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500"
                       placeholder="Enter the title you would like to give your assignment"
                     />
                   </div>
+
+                  {/* Due Date */}
                   <div>
                     <label
                       htmlFor="dueDate"
@@ -139,52 +157,42 @@ export default function CreateAssignment({
                     >
                       Due Date
                     </label>
-                    <input
-                      type="date"
-                      name="dueDate"
-                      id="dueDate"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500"
-                    />
+                    <Input type="date" name="dueDate" id="dueDate" />
                   </div>
+
                   {/* Topics */}
                   <div>
-                    <label
-                      htmlFor="topics"
-                      className="block text-sm font-medium text-gray-700 mb-2"
-                    >
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
                       Topic(s)
                     </label>
-                    <div className="w-full">
-                      <Autocomplete
-                        id="topics"
-                        multiple
-                        options={availableTopics}
-                        getOptionLabel={(option) => option.name}
-                        value={selectedTopics}
-                        onChange={(_, newValue) => setSelectedTopics(newValue)}
-                        renderInput={(params) => (
-                          <TextField
-                            {...params}
-                            placeholder="Select topics this assignment will cover"
-                            size="small"
-                            sx={{
-                              "& .MuiOutlinedInput-root": {
-                                "& fieldset": {
-                                  borderColor: "#d1d5db",
-                                },
-                                "&:hover fieldset": {
-                                  borderColor: "#9ca3af",
-                                },
-                                "&.Mui-focused fieldset": {
-                                  borderColor: "#3b82f6",
-                                  borderWidth: "2px",
-                                },
-                              },
-                            }}
-                          />
-                        )}
-                      />
-                    </div>
+                    <Combobox
+                      multiple
+                      value={selectedTopics}
+                      onValueChange={(v: Topic[]) => setSelectedTopics(v)}
+                      itemToStringLabel={(t: Topic) => t.name}
+                    >
+                      <ComboboxChips>
+                        <ComboboxValue>
+                          {(value: Topic[]) =>
+                            value.map((topic) => (
+                              <ComboboxChip key={topic.id}>
+                                {topic.name}
+                              </ComboboxChip>
+                            ))
+                          }
+                        </ComboboxValue>
+                        <ComboboxChipsInput />
+                      </ComboboxChips>
+                      <ComboboxContent>
+                        <ComboboxList>
+                          {availableTopics.map((topic) => (
+                            <ComboboxItem key={topic.id} value={topic}>
+                              {topic.name}
+                            </ComboboxItem>
+                          ))}
+                        </ComboboxList>
+                      </ComboboxContent>
+                    </Combobox>
                   </div>
 
                   {/* Description */}
@@ -195,69 +203,71 @@ export default function CreateAssignment({
                     >
                       Description/Instructions
                     </label>
-                    <textarea
+                    <Textarea
                       name="description"
                       id="description"
                       rows={4}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500 resize-none"
                       placeholder="Provide detailed instructions for students..."
                     />
                   </div>
-                </div>
-              </div>
+                </CardContent>
+              </Card>
 
               {/* Problems Section */}
-              <div className="bg-white rounded-lg shadow-sm border">
-                <div className="p-6 border-b">
-                  <h2 className="text-xl font-semibold text-gray-900">
-                    Problems
-                  </h2>
-                  <p className="text-gray-600 text-sm mt-1">
+              <Card>
+                <CardHeader className="border-b">
+                  <CardTitle className="text-xl">Problems</CardTitle>
+                  <CardDescription>
                     Create or generate problems for this assignment
-                  </p>
-                </div>
+                  </CardDescription>
+                </CardHeader>
 
-                <div className="p-6">
+                <CardContent>
                   <ProblemsManager
                     topics={availableTopics}
                     problems={problems}
                     setProblems={setProblems}
                   />
-                </div>
-              </div>
+                </CardContent>
+              </Card>
             </div>
 
             {/* Sidebar - Right Column */}
             <div className="space-y-6">
               {/* Quick Tips */}
-              <div className="bg-red-50 rounded-lg border border-red-200 p-6">
-                <h4 className="text-sm font-semibold text-red-900 mb-3">
-                  💡 Quick Tips
-                </h4>
-                <ul className="text-sm text-red-800 space-y-2">
-                  <li>• Clear titles help students understand the focus</li>
-                  <li>• Add detailed instructions to reduce confusion</li>
-                  <li>• Mix problem types for better engagement</li>
-                  <li>• Consider difficulty progression</li>
-                </ul>
-              </div>
+              <Card className="bg-red-50 ring-red-200">
+                <CardHeader>
+                  <CardTitle className="text-sm text-red-900">
+                    💡 Quick Tips
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ul className="text-sm text-red-800 space-y-2">
+                    <li>• Clear titles help students understand the focus</li>
+                    <li>• Add detailed instructions to reduce confusion</li>
+                    <li>• Mix problem types for better engagement</li>
+                    <li>• Consider difficulty progression</li>
+                  </ul>
+                </CardContent>
+              </Card>
 
               {/* Action Buttons */}
               <div className="space-y-3">
-                <button
+                <Button
                   type="submit"
-                  className="w-full bg-red-600 text-white py-3 px-4 rounded-lg hover:bg-red-700 transition-colors font-medium"
+                  className="w-full bg-red-600 hover:bg-red-700 text-white py-3 font-medium"
                 >
                   Create Assignment
-                </button>
+                </Button>
 
-                <button
+                <Button
                   type="button"
-                  className="w-full text-gray-500 py-2 px-4 hover:text-gray-700 transition-colors text-sm"
+                  variant="ghost"
+                  className="w-full text-gray-500 hover:text-gray-700 text-sm"
                   onClick={() => redirect(`/courses/${courseId}`)}
                 >
                   Cancel
-                </button>
+                </Button>
               </div>
             </div>
           </div>
