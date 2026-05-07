@@ -5,7 +5,6 @@ import { redirect } from "next/navigation";
 import AddCourse from "@/app/components/ui/AddCourse";
 import { createCourse } from "@/app/actions/actions";
 import CourseCard from "@/app/components/ui/CourseCard";
-import ActiveAssignments from "@/app/components/layout/ActiveAssignments";
 
 const TeacherPage = async () => {
   const supabase = await createClient();
@@ -70,7 +69,6 @@ const TeacherPage = async () => {
             )}
           </div>
         </div>
-        <ActiveAssignments assignments={[]} />
       </div>
     </div>
   );
