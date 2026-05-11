@@ -73,7 +73,7 @@ const StudentPage = async () => {
           {coursesEnrolledIn && coursesEnrolledIn.length > 0 ? (
             <div className="grid gap-4">
               {coursesEnrolledIn.map((course, index: number) => (
-                <CourseCard index={index} course={course} />
+                <CourseCard key={index} course={course} />
               ))}
             </div>
           ) : (

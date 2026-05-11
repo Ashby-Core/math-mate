@@ -1,11 +1,10 @@
 import { createClient } from "@/utils/supabase/server";
 import UserNavbar from "@/app/components/layout/UserNavbar";
-import { Assignment, Course, Profile } from "@/app/types";
+import { Course, Profile } from "@/app/types";
 import { redirect } from "next/navigation";
 import AddCourse from "@/app/components/ui/AddCourse";
 import { createCourse } from "@/app/actions/actions";
 import CourseCard from "@/app/components/ui/CourseCard";
-import ActiveAssignments from "@/app/components/layout/ActiveAssignments";
 
 const TeacherPage = async () => {
   const supabase = await createClient();
@@ -28,8 +27,6 @@ const TeacherPage = async () => {
     .from("courses")
     .select("*")
     .eq("teacher", user?.id);
-  
-  const { data: assignmentsData } = await supabase.from('assignments').select('*')
 
   if (profileError) {
     console.error("Profile log not found: ", profileError);
@@ -47,7 +44,6 @@ const TeacherPage = async () => {
       }
     : null;
   const courses: Course[] | null = coursesData;
-  const assignments: Assignment[] | null = assignmentsData?.filter((assignment) => assignment.course)
 
   return (
     <div>
@@ -73,7 +69,6 @@ const TeacherPage = async () => {
             )}
           </div>
         </div>
-        <ActiveAssignments assignments={[]} />
       </div>
     </div>
   );

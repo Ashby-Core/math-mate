@@ -4,20 +4,31 @@ import { TopicMastery } from "@/app/types";
 import { createClient } from "@/utils/supabase/client";
 import { UUID } from "crypto";
 import React, { useEffect, useState } from "react";
+import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import {
-  BarChart,
-  Bar,
-  CartesianGrid,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-} from "recharts";
+  Card,
+  CardHeader,
+  CardTitle,
+  CardContent,
+} from "@/components/ui/card";
+import {
+  ChartConfig,
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+} from "@/components/ui/chart";
 
 interface TopicMasteriesChartProps {
   studentId: UUID;
   courseId: UUID;
 }
+
+const chartConfig = {
+  masteryScore: {
+    label: "Mastery Score",
+    color: "var(--chart-1)",
+  },
+} satisfies ChartConfig;
 
 const TopicMasteriesChart = ({
   studentId,
@@ -53,7 +64,7 @@ const TopicMasteriesChart = ({
           const mastery = topicMasteriesData.find(
             (entry) => entry.topic_id === topic.id
           );
-          
+
           masteries.push({
             name: topic.name,
             masteryScore: mastery.mastery_score,
@@ -70,17 +81,29 @@ const TopicMasteriesChart = ({
   }, [courseId, studentId]);
 
   return (
-    <div className="w-full h-80">
-      <ResponsiveContainer width="100%" height="100%">
-        <BarChart width={600} height={300} data={topicMasteries}>
-          <CartesianGrid strokeDasharray="3 3" />
-          <Bar dataKey="masteryScore" fill="#2196f3" />
-          <XAxis dataKey="name" />
-          <YAxis />
-          <Tooltip />
-        </BarChart>
-      </ResponsiveContainer>
-    </div>
+    <Card className="mt-6">
+      <CardHeader>
+        <CardTitle className="text-lg">Topic Masteries</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <ChartContainer
+          config={chartConfig}
+          className="aspect-auto h-80 w-full"
+        >
+          <BarChart data={topicMasteries}>
+            <CartesianGrid vertical={false} strokeDasharray="3 3" />
+            <XAxis dataKey="name" tickLine={false} axisLine={false} />
+            <YAxis tickLine={false} axisLine={false} />
+            <ChartTooltip content={<ChartTooltipContent />} />
+            <Bar
+              dataKey="masteryScore"
+              fill="var(--color-masteryScore)"
+              radius={4}
+            />
+          </BarChart>
+        </ChartContainer>
+      </CardContent>
+    </Card>
   );
 };
 

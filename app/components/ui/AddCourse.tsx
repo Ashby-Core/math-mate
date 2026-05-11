@@ -1,80 +1,70 @@
 "use client";
 
+import React from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
-  Button,
   Dialog,
-  DialogActions,
+  DialogTrigger,
   DialogContent,
+  DialogHeader,
   DialogTitle,
-  TextField,
-} from "@mui/material";
-import React, { useState } from "react";
+  DialogFooter,
+  DialogClose,
+} from "@/components/ui/dialog";
 
 interface AddCourseProps {
-  createCourseAction: (formData: FormData) => Promise<
-    | {
-        error: string;
-        success?: undefined;
-      }
-    | {
-        success: boolean;
-        error?: undefined;
-      }
-  >;
+  createCourseAction: (formData: FormData) => Promise<void>;
 }
 
 const AddCourse = ({ createCourseAction }: AddCourseProps) => {
-  const [createCourseModalOpen, setCreateCourseModalOpen] = useState(false);
-
-  const handleOpen = () => {
-    setCreateCourseModalOpen(true);
-  };
-
-  const handleClose = () => {
-    setCreateCourseModalOpen(false);
-  };
-
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-
-    const formData = new FormData(e.currentTarget);
-    createCourseAction(formData);
-
-    handleClose();
-  };
-
   return (
-    <div>
-      <Button
-        className="text-orange-400 border border-orange-200 px-3 font-semibold hover:bg-orange-50 rounded-xl shadow-xs"
-        onClick={handleOpen}
-      >
-        + Add Course
-      </Button>
-      <Dialog open={createCourseModalOpen} onClose={handleClose}>
-        <DialogTitle>Add New Course</DialogTitle>
-        <DialogContent>
-          <form onSubmit={handleSubmit}>
-            <TextField
+    <Dialog>
+      <DialogTrigger asChild>
+        <Button
+          variant="outline"
+          className="text-orange-400 border-orange-200 font-semibold hover:bg-orange-50 rounded-xl shadow-xs"
+        >
+          + Add Course
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Add New Course</DialogTitle>
+        </DialogHeader>
+        <form action={createCourseAction}>
+          <div className="mb-4">
+            <label
+              htmlFor="courseName"
+              className="block text-sm font-medium text-gray-700 mb-1"
+            >
+              Course Name
+            </label>
+            <Input
               autoFocus
-              required
-              margin="dense"
               id="courseName"
               name="courseName"
-              label="New course name"
-              color="error"
               type="text"
-              fullWidth
-              variant="standard"
-            ></TextField>
-            <DialogActions>
-              <Button color="error" onClick={handleClose}>Cancel</Button>
-              <Button color="error" type="submit">Create course</Button>
-            </DialogActions>
-          </form>
-        </DialogContent>
-      </Dialog>
-    </div>
+              placeholder="New course name"
+              required
+            />
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline">Cancel</Button>
+            </DialogClose>
+            <DialogClose asChild>
+              <Button
+                type="submit"
+                className="bg-red-600 hover:bg-red-700 text-white"
+              >
+                Create Course
+              </Button>
+            </DialogClose>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 };
 

@@ -1,6 +1,6 @@
-import TextInput from "../components/ui/TextInput";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { login } from "../actions/actions";
-import { Button } from "@mui/material";
 
 export default function LoginPage() {
   return (
@@ -12,22 +12,40 @@ export default function LoginPage() {
         </div>
         <form action={login} className="mt-8 space-y-6">
           <div className="space-y-4">
-            <TextInput
-              labelText="Email"
-              name="email"
-              type="email"
-              placeholder="Enter your email"
-            />
-            <TextInput
-              labelText="Password"
-              name="password"
-              type="password"
-              placeholder="Enter your password"
-            />
+            <div>
+              <label
+                htmlFor="email"
+                className="block text-sm font-medium text-gray-700 mb-1"
+              >
+                Email
+              </label>
+              <Input
+                id="email"
+                name="email"
+                type="email"
+                placeholder="Enter your email"
+                required
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="password"
+                className="block text-sm font-medium text-gray-700 mb-1"
+              >
+                Password
+              </label>
+              <Input
+                id="password"
+                name="password"
+                type="password"
+                placeholder="Enter your password"
+                required
+              />
+            </div>
           </div>
           <Button
             type="submit"
-            className="w-full flex justify-center py-2 px-4 rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 hover:cursor-pointer transition-colors"
+            className="w-full bg-red-600 hover:bg-red-700 text-white"
           >
             Log In
           </Button>

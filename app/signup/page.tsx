@@ -1,7 +1,25 @@
-import Dropdown from "../components/ui/Dropdown";
-import TextInput from "../components/ui/TextInput";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import {
+  Combobox,
+  ComboboxInput,
+  ComboboxContent,
+  ComboboxList,
+  ComboboxItem,
+  ComboboxEmpty,
+} from "@/components/ui/combobox";
 import { signup } from "../actions/actions";
-import { Button } from "@mui/material";
+
+const demographicOptions = [
+  "white",
+  "black/african american",
+  "asian/pacific islander",
+  "hispanic or latino",
+  "american indian or alaska native",
+  "two or more races",
+  "other/prefer not to say",
+];
 
 export default function SignupPage() {
   return (
@@ -15,100 +33,142 @@ export default function SignupPage() {
         </div>
         <form action={signup} className="mt-8 space-y-6">
           <div className="space-y-4">
-            <div className="flex justify-between">
-              <TextInput
-                labelText="First Name"
-                name="first-name"
-                type="text"
-                placeholder="Enter your first name"
-              />
-              <TextInput
-                labelText="Last Name"
-                name="last-name"
-                type="text"
-                placeholder="Enter your last name"
+            <div className="flex justify-between gap-4">
+              <div className="flex-1">
+                <label
+                  htmlFor="first-name"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
+                  First Name
+                </label>
+                <Input
+                  id="first-name"
+                  name="first-name"
+                  type="text"
+                  placeholder="Enter your first name"
+                  required
+                />
+              </div>
+              <div className="flex-1">
+                <label
+                  htmlFor="last-name"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
+                  Last Name
+                </label>
+                <Input
+                  id="last-name"
+                  name="last-name"
+                  type="text"
+                  placeholder="Enter your last name"
+                  required
+                />
+              </div>
+            </div>
+            <div>
+              <label
+                htmlFor="email"
+                className="block text-sm font-medium text-gray-700 mb-1"
+              >
+                Email
+              </label>
+              <Input
+                id="email"
+                name="email"
+                type="email"
+                placeholder="Enter your email"
+                required
               />
             </div>
-            <TextInput
-              labelText="Email"
-              name="email"
-              type="email"
-              placeholder="Enter your email"
-            />
-            <TextInput
-              labelText="Username"
-              name="username"
-              type="text"
-              placeholder="Enter your username"
-            />
+            <div>
+              <label
+                htmlFor="username"
+                className="block text-sm font-medium text-gray-700 mb-1"
+              >
+                Username
+              </label>
+              <Input
+                id="username"
+                name="username"
+                type="text"
+                placeholder="Enter your username"
+                required
+              />
+            </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-3">
                 I am a
               </label>
-              <div className="space-y-2">
-                <div className="flex items-center">
-                  <input
-                    id="student"
-                    name="role"
-                    type="radio"
-                    value="student"
-                    className="h-4 w-4 text-red-600 focus:ring-red-500 border-gray-300"
-                    required
-                  />
-                  <label
-                    htmlFor="student"
-                    className="ml-2 text-sm text-gray-900"
-                  >
+              <RadioGroup name="role" required>
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem id="student" value="student" />
+                  <label htmlFor="student" className="text-sm text-gray-900">
                     Student
                   </label>
                 </div>
-                <div className="flex items-center">
-                  <input
-                    id="teacher"
-                    name="role"
-                    type="radio"
-                    value="teacher"
-                    className="h-4 w-4 text-red-600 focus:ring-red-500 border-gray-300"
-                    required
-                  />
-                  <label
-                    htmlFor="teacher"
-                    className="ml-2 text-sm text-gray-900"
-                  >
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem id="teacher" value="teacher" />
+                  <label htmlFor="teacher" className="text-sm text-gray-900">
                     Teacher
                   </label>
                 </div>
-              </div>
+              </RadioGroup>
             </div>
-            <Dropdown
-              labelText="Demographic"
-              name="demographic"
-              options={[
-                "white",
-                "black/african american",
-                "asian/pacific islander",
-                "hispanic or latino",
-                "american indian or alaska native",
-                "two or more races",
-                "other/prefer not to say",
-              ]}
-            />
-            <TextInput
-              labelText="Password"
-              name="password"
-              type="password"
-              placeholder="Enter your password"
-            />
-            <TextInput
-              labelText="Confirm password"
-              name="confirm-password"
-              type="password"
-              placeholder="Confirm your password"
-            />
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Demographic
+              </label>
+              <Combobox name="demographic">
+                <ComboboxInput
+                  placeholder="Select demographic..."
+                  className="w-full"
+                />
+                <ComboboxContent>
+                  <ComboboxList>
+                    {demographicOptions.map((option) => (
+                      <ComboboxItem key={option} value={option}>
+                        {option}
+                      </ComboboxItem>
+                    ))}
+                  </ComboboxList>
+                  <ComboboxEmpty>No results found.</ComboboxEmpty>
+                </ComboboxContent>
+              </Combobox>
+            </div>
+            <div>
+              <label
+                htmlFor="password"
+                className="block text-sm font-medium text-gray-700 mb-1"
+              >
+                Password
+              </label>
+              <Input
+                id="password"
+                name="password"
+                type="password"
+                placeholder="Enter your password"
+                required
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="confirm-password"
+                className="block text-sm font-medium text-gray-700 mb-1"
+              >
+                Confirm password
+              </label>
+              <Input
+                id="confirm-password"
+                name="confirm-password"
+                type="password"
+                placeholder="Confirm your password"
+                required
+              />
+            </div>
           </div>
           <Button
             type="submit"
-            className="w-full flex justify-center py-2 px-4 rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 hover:cursor-pointer transition-colors"
+            className="w-full bg-red-600 hover:bg-red-700 text-white"
           >
             Sign Up
           </Button>

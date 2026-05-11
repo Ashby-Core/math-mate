@@ -5,6 +5,12 @@ import { Course } from "@/app/types";
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import TopicMasteriesChart from "@/app/components/ui/TopicMasteries";
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardContent,
+} from "@/components/ui/card";
 
 export default async function CoursePage({
   params,
@@ -107,38 +113,38 @@ export default async function CoursePage({
             {userIsTeacher ? <Students course={course} /> : <></>}
 
             {/* Quick Stats */}
-            {userIsTeacher ? (
-              <div className="mt-6 bg-white rounded-lg shadow-sm border p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                  Quick Stats
-                </h3>
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600 text-sm">
-                      Total Assignments
-                    </span>
-                    <span className="font-medium text-gray-900">
-                      {assignments?.length || 0}
-                    </span>
+            {userIsTeacher && (
+              <Card className="mt-6">
+                <CardHeader>
+                  <CardTitle className="text-lg">Quick Stats</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600 text-sm">
+                        Total Assignments
+                      </span>
+                      <span className="font-medium text-gray-900">
+                        {assignments?.length || 0}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600 text-sm">
+                        Enrolled Students
+                      </span>
+                      <span className="font-medium text-gray-900">
+                        {students.length}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600 text-sm">Created</span>
+                      <span className="font-medium text-gray-900 text-sm">
+                        {new Date(course.createdAt).toLocaleDateString()}
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600 text-sm">
-                      Enrolled Students
-                    </span>
-                    <span className="font-medium text-gray-900">
-                      {students.length}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600 text-sm">Created</span>
-                    <span className="font-medium text-gray-900 text-sm">
-                      {new Date(course.createdAt).toLocaleDateString()}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <></>
+                </CardContent>
+              </Card>
             )}
           </div>
         </div>

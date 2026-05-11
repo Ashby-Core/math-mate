@@ -1,6 +1,6 @@
-import Feature from "./components/layout/Feature";
-import LandingPageNavbar from "./components/layout/LandingPageNavbar";
-import { Button } from "@mui/material";
+import { Button } from "@/components/ui/button";
+import Feature from "./Feature";
+import LandingPageNavbar from "./LandingPageNavbar";
 import Image from "next/image";
 
 export default function Home() {
