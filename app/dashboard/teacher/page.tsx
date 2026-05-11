@@ -1,10 +1,10 @@
 import { createClient } from "@/utils/supabase/server";
-import UserNavbar from "@/app/components/layout/UserNavbar";
+import UserNavbar from "@/app/UserNavbar";
 import { Course, Profile } from "@/app/types";
 import { redirect } from "next/navigation";
-import AddCourse from "@/app/components/ui/AddCourse";
+import AddCourse from "@/app/dashboard/teacher/AddCourse";
 import { createCourse } from "@/app/actions/actions";
-import CourseCard from "@/app/components/ui/CourseCard";
+import CourseCard from "@/app/dashboard/CourseCard";
 
 const TeacherPage = async () => {
   const supabase = await createClient();

@@ -1,12 +1,12 @@
 import React from "react";
-import Logo from "./components/ui/Logo";
-import { Button } from "@/components/ui/button";
+import Logo from "../public/Logo";
+import { Button } from "@/app/components/ui/button";
 import {
   NavigationMenu,
   NavigationMenuList,
   NavigationMenuItem,
   NavigationMenuLink,
-} from "@/components/ui/navigation-menu";
+} from "@/app/components/ui/navigation-menu";
 
 const LandingPageNavbar = () => {
   return (

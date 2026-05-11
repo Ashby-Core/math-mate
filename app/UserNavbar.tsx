@@ -1,13 +1,13 @@
 import React from "react";
-import Logo from "../ui/Logo";
+import Logo from "../public/Logo";
 import { logout } from "@/app/actions/actions";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/app/components/ui/button";
 import {
   NavigationMenu,
   NavigationMenuList,
   NavigationMenuItem,
   NavigationMenuLink,
-} from "@/components/ui/navigation-menu";
+} from "@/app/components/ui/navigation-menu";
 
 const UserNavbar = () => {
   return (

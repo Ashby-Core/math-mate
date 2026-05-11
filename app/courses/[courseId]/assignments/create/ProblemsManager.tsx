@@ -5,8 +5,8 @@ import React from "react";
 import { UUID } from "crypto";
 import { Pencil, FileText, Trash2, X } from "lucide-react";
 import ProblemEdit from "./ProblemEdit";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/app/components/ui/button";
+import { Card, CardContent } from "@/app/components/ui/card";
 
 interface ProblemsManagerProps {
   topics: Topic[];

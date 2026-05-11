@@ -1,7 +1,7 @@
 import { enrollInCourse } from "@/app/actions/actions";
-import UserNavbar from "@/app/components/layout/UserNavbar";
-import CourseCard from "@/app/components/ui/CourseCard";
-import EnrollInCourse from "@/app/components/ui/EnrollInCourse";
+import UserNavbar from "@/app/UserNavbar";
+import CourseCard from "@/app/dashboard/CourseCard";
+import EnrollInCourse from "@/app/dashboard/student/EnrollInCourse";
 import { Course, Profile } from "@/app/types";
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
@@ -16,7 +16,7 @@ const StudentPage = async () => {
     const courses: Course[] = [];
 
     for (let i = 0; i < enrollmentsData.length; i += 1) {
-      courses.push(enrollmentsData[i].courses)
+      courses.push(enrollmentsData[i].courses);
     }
 
     return courses;

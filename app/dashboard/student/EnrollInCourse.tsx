@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Button } from "@/app/components/ui/button";
+import { Input } from "@/app/components/ui/input";
 import {
   Dialog,
   DialogTrigger,
@@ -11,10 +11,12 @@ import {
   DialogTitle,
   DialogFooter,
   DialogClose,
-} from "@/components/ui/dialog";
+} from "@/app/components/ui/dialog";
 
 interface EnrollInCourseProps {
-  enrollAction: (formData: FormData) => Promise<
+  enrollAction: (
+    formData: FormData,
+  ) => Promise<
     | { error: string; success?: undefined }
     | { success: boolean; error?: undefined }
   >;

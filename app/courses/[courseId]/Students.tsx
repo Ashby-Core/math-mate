@@ -7,7 +7,7 @@ import {
   CardHeader,
   CardTitle,
   CardContent,
-} from "@/components/ui/card";
+} from "@/app/components/ui/card";
 
 interface StudentsProps {
   course: Course;

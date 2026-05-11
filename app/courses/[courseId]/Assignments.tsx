@@ -1,5 +1,5 @@
 import React from "react";
-import AddAssignment from "../ui/AddAssignment";
+import AddAssignment from "./AddAssignment";
 import { Course } from "@/app/types";
 import { createClient } from "@/utils/supabase/server";
 import {
@@ -8,7 +8,7 @@ import {
   CardTitle,
   CardAction,
   CardContent,
-} from "@/components/ui/card";
+} from "@/app/components/ui/card";
 import { Newspaper } from "lucide-react";
 
 interface AssignmentsProps {

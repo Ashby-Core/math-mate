@@ -6,7 +6,7 @@ import {
   CardTitle,
   CardDescription,
   CardAction,
-} from "@/components/ui/card";
+} from "@/app/components/ui/card";
 
 interface CourseCardProps {
   course: Course;

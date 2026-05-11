@@ -1,6 +1,6 @@
 "use client";
 
-import UserNavbar from "@/app/components/layout/UserNavbar";
+import UserNavbar from "@/app/UserNavbar";
 import { Topic, Problem } from "@/app/types";
 import { createClient } from "@/utils/supabase/client";
 import { redirect } from "next/navigation";
@@ -14,10 +14,10 @@ import {
   CardTitle,
   CardDescription,
   CardContent,
-} from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Button } from "@/components/ui/button";
+} from "@/app/components/ui/card";
+import { Input } from "@/app/components/ui/input";
+import { Textarea } from "@/app/components/ui/textarea";
+import { Button } from "@/app/components/ui/button";
 import {
   Combobox,
   ComboboxChips,

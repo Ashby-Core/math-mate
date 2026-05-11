@@ -1,16 +1,16 @@
-import Assignments from "@/app/components/layout/Assignments";
-import UserNavbar from "@/app/components/layout/UserNavbar";
-import Students from "@/app/components/layout/Students";
+import Assignments from "@/app/courses/[courseId]/Assignments";
+import UserNavbar from "@/app/UserNavbar";
+import Students from "@/app/courses/[courseId]/Students";
 import { Course } from "@/app/types";
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
-import TopicMasteriesChart from "@/app/components/ui/TopicMasteries";
+import TopicMasteriesChart from "@/app/courses/[courseId]/TopicMasteries";
 import {
   Card,
   CardHeader,
   CardTitle,
   CardContent,
-} from "@/components/ui/card";
+} from "@/app/components/ui/card";
 
 export default async function CoursePage({
   params,

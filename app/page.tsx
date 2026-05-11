@@ -1,4 +1,4 @@
-import { Button } from "@/components/ui/button";
+import { Button } from "@/app/components/ui/button";
 import Feature from "./Feature";
 import LandingPageNavbar from "./LandingPageNavbar";
 import Image from "next/image";

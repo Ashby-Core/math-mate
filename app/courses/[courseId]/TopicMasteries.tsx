@@ -10,13 +10,13 @@ import {
   CardHeader,
   CardTitle,
   CardContent,
-} from "@/components/ui/card";
+} from "@/app/components/ui/card";
 import {
   ChartConfig,
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
-} from "@/components/ui/chart";
+} from "@/app/components/ui/chart";
 
 interface TopicMasteriesChartProps {
   studentId: UUID;
@@ -62,7 +62,7 @@ const TopicMasteriesChart = ({
       if (relevantTopicsData && topicMasteriesData) {
         for (const topic of relevantTopicsData) {
           const mastery = topicMasteriesData.find(
-            (entry) => entry.topic_id === topic.id
+            (entry) => entry.topic_id === topic.id,
           );
 
           masteries.push({

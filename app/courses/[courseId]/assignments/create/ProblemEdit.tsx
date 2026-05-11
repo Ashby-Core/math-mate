@@ -2,18 +2,18 @@ import { Problem } from "@/app/types";
 import { UUID } from "crypto";
 import React from "react";
 import { CircleHelp, CircleCheck } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
-import { Textarea } from "@/components/ui/textarea";
+import { Card, CardContent } from "@/app/components/ui/card";
+import { Textarea } from "@/app/components/ui/textarea";
 
 interface ProblemEditProps {
   problem: Problem;
   setQuestionContent: (
     event: React.ChangeEvent<HTMLTextAreaElement>,
-    id: UUID
+    id: UUID,
   ) => void;
   setCorrectAnswer: (
     event: React.ChangeEvent<HTMLTextAreaElement>,
-    id: UUID
+    id: UUID,
   ) => void;
 }
 
