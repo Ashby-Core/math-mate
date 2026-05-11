@@ -33,26 +33,26 @@ const ProblemsManager = ({
 
   const setNewQuestionContent = (
     event: React.ChangeEvent<HTMLTextAreaElement>,
-    id: UUID
+    id: UUID,
   ) => {
     event.preventDefault();
     const updatedProblems = problems.map((problem) =>
       problem.id === id
         ? { ...problem, questionContent: event.target.value }
-        : problem
+        : problem,
     );
     setProblems(updatedProblems);
   };
 
   const setNewCorrectAnswer = (
     event: React.ChangeEvent<HTMLTextAreaElement>,
-    id: UUID
+    id: UUID,
   ) => {
     event.preventDefault();
     const updatedProblems = problems.map((problem) =>
       problem.id === id
         ? { ...problem, correctAnswer: event.target.value }
-        : problem
+        : problem,
     );
     setProblems(updatedProblems);
   };
@@ -65,14 +65,14 @@ const ProblemsManager = ({
     <div className="space-y-6">
       {/* Action Buttons */}
       <Button
-          type="button"
-          variant="outline"
-          onClick={handleAddProblem}
-          className="w-full border-2 border-red-600 text-red-600 hover:bg-red-50 hover:text-red-600 py-3"
-        >
-          <Pencil />
-          Create
-        </Button>
+        type="button"
+        variant="outline"
+        onClick={handleAddProblem}
+        className="w-full border-2 border-red-600 text-red-600 hover:bg-red-50 hover:text-red-600 py-3"
+      >
+        <Pencil />
+        Create
+      </Button>
 
       {/* Problems List */}
       <div className="space-y-4">
