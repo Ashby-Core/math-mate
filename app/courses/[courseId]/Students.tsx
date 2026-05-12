@@ -1,5 +1,6 @@
 import { Course, Profile } from "@/app/types";
 import { createClient } from "@/utils/supabase/server";
+import { getProfileById } from "@/app/queries/profiles";
 import { PersonStanding } from "lucide-react";
 import React from "react";
 import {
@@ -23,18 +24,10 @@ const Students = async ({ course }: StudentsProps) => {
 
   const students: Profile[] = [];
   if (enrollments) {
-    for (let i = 0; i < enrollments.length; i++) {
-      const { data: student } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", enrollments[i].student_id)
-        .single();
+    for (const enrollment of enrollments) {
+      const student = await getProfileById(supabase, enrollment.student_id);
       if (student) {
-        students.push({
-          firstName: student.first_name,
-          lastName: student.last_name,
-          username: student.username,
-        });
+        students.push(student);
       }
     }
   }

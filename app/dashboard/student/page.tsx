@@ -1,61 +1,29 @@
 import { enrollInCourse } from "@/app/queries/actions";
+import { requireUser } from "@/app/queries/auth";
+import { getProfileById } from "@/app/queries/profiles";
 import UserNavbar from "@/app/UserNavbar";
 import CourseCard from "@/app/dashboard/CourseCard";
 import EnrollInCourse from "@/app/dashboard/student/EnrollInCourse";
-import { Course, Profile } from "@/app/types";
-import { createClient } from "@/utils/supabase/server";
-import { redirect } from "next/navigation";
+import { Course } from "@/app/types";
 import React from "react";
 
 const StudentPage = async () => {
-  const fetchEnrollments = async (): Promise<Course[] | null> => {
-    if (!enrollmentsData) {
-      return null;
-    }
+  const { supabase, user } = await requireUser();
 
-    const courses: Course[] = [];
+  const profile = await getProfileById(supabase, user.id);
 
-    for (let i = 0; i < enrollmentsData.length; i += 1) {
-      courses.push(enrollmentsData[i].courses);
-    }
-
-    return courses;
-  };
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    redirect("/login");
-  }
-
-  const { data: profileData, error: profileError } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("id", user.id)
-    .single();
   const { data: enrollmentsData, error: enrollmentsError } = await supabase
     .from("enrollments")
     .select("*, courses(*)")
     .eq("student_id", user.id);
 
-  if (profileError) {
-    console.error("Profile log not found: ", profileError);
-  }
-
   if (enrollmentsError) {
     console.error("Error fetching courses: ", enrollmentsError);
   }
 
-  const profile: Profile | null = profileData
-    ? {
-        firstName: profileData.first_name,
-        lastName: profileData.last_name,
-        username: profileData.username,
-      }
+  const coursesEnrolledIn: Course[] | null = enrollmentsData
+    ? enrollmentsData.map((entry) => entry.courses)
     : null;
-  const coursesEnrolledIn: Course[] | null = await fetchEnrollments();
 
   return (
     <div>

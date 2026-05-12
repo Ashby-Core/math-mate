@@ -2,8 +2,8 @@ import Assignments from "@/app/courses/[courseId]/Assignments";
 import UserNavbar from "@/app/UserNavbar";
 import Students from "@/app/courses/[courseId]/Students";
 import { Course } from "@/app/types";
-import { createClient } from "@/utils/supabase/server";
-import { redirect } from "next/navigation";
+import { requireUser } from "@/app/queries/auth";
+import { getProfileById } from "@/app/queries/profiles";
 import TopicMasteriesChart from "@/app/courses/[courseId]/TopicMasteries";
 import {
   Card,
@@ -19,23 +19,11 @@ export default async function CoursePage({
 }) {
   const { courseId } = await params;
 
-  const supabase = await createClient();
+  const { supabase, user } = await requireUser();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const profile = await getProfileById(supabase, user.id);
 
-  if (!user) {
-    redirect("/login");
-  }
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("id", user.id)
-    .single();
-
-  const userIsTeacher = profile?.user_role === "teacher";
+  const userIsTeacher = profile?.userRole === "teacher";
 
   const { data: courseData } = await supabase
     .from("courses")
@@ -148,10 +136,8 @@ export default async function CoursePage({
             )}
           </div>
         </div>
-        {!userIsTeacher ? (
-          <TopicMasteriesChart studentId={profile?.id} courseId={course.id} />
-        ) : (
-          <></>
+        {!userIsTeacher && profile && (
+          <TopicMasteriesChart studentId={profile.id} courseId={course.id} />
         )}
       </div>
     </div>

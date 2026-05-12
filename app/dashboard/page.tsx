@@ -1,31 +1,15 @@
-import { redirect } from 'next/navigation'
-import { createClient } from '@/utils/supabase/server'
+import { redirect } from "next/navigation";
+
+import { requireUser } from "@/app/queries/auth";
+import { getProfileById } from "@/app/queries/profiles";
 
 export default async function DashboardPage() {
-  const supabase = await createClient()
-  
-  const { data: { user } } = await supabase.auth.getUser()
-  
-  if (!user) {
-    redirect('/login')
-  }
+  const { supabase, user } = await requireUser();
+  const profile = await getProfileById(supabase, user.id);
 
-  // Get user profile to determine role
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('user_role')
-    .eq('id', user.id)
-    .single()
-
-  if (profile?.user_role === 'teacher') {
-    redirect('/dashboard/teacher')
+  if (profile?.userRole === "teacher") {
+    redirect("/dashboard/teacher");
   } else {
-    redirect('/dashboard/student')
+    redirect("/dashboard/student");
   }
-
-  return (
-    <div>
-      <h1>Loading...</h1>
-    </div>
-  )
 }

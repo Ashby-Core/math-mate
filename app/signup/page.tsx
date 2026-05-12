@@ -8,7 +8,7 @@ import {
   ComboboxList,
   ComboboxItem,
   ComboboxEmpty,
-} from "@/components/ui/combobox";
+} from "@/app/components/ui/combobox";
 import { signup } from "../queries/actions";
 
 const demographicOptions = [

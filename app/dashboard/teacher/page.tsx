@@ -1,48 +1,25 @@
-import { createClient } from "@/utils/supabase/server";
 import UserNavbar from "@/app/UserNavbar";
-import { Course, Profile } from "@/app/types";
-import { redirect } from "next/navigation";
+import { Course } from "@/app/types";
 import AddCourse from "@/app/dashboard/teacher/AddCourse";
 import { createCourse } from "@/app/queries/actions";
+import { requireUser } from "@/app/queries/auth";
+import { getProfileById } from "@/app/queries/profiles";
 import CourseCard from "@/app/dashboard/CourseCard";
 
 const TeacherPage = async () => {
-  const supabase = await createClient();
+  const { supabase, user } = await requireUser();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    redirect("/login");
-  }
-
-  const { data: profileData, error: profileError } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("id", user.id)
-    .single();
+  const profile = await getProfileById(supabase, user.id);
 
   const { data: coursesData, error: coursesError } = await supabase
     .from("courses")
     .select("*")
-    .eq("teacher", user?.id);
-
-  if (profileError) {
-    console.error("Profile log not found: ", profileError);
-  }
+    .eq("teacher", user.id);
 
   if (coursesError) {
     console.error("Error fetching courses: ", coursesError);
   }
 
-  const profile: Profile | null = profileData
-    ? {
-        firstName: profileData.first_name,
-        lastName: profileData.last_name,
-        username: profileData.username,
-      }
-    : null;
   const courses: Course[] | null = coursesData;
 
   return (

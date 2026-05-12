@@ -2,9 +2,11 @@ import { UUID } from "crypto";
 import { Timestamp } from "next/dist/server/lib/cache-handlers/types";
 
 export type Profile = {
+  id: UUID;
   firstName: string;
   lastName: string;
   username: string;
+  userRole: "teacher" | "student";
 };
 
 export type Course = {
