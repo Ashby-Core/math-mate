@@ -7,6 +7,7 @@ import { createClient } from "@/utils/supabase/server";
 import { UUID } from "crypto";
 import { SupabaseClient } from "@supabase/supabase-js";
 import { Problem } from "../types";
+import { requireUser } from "./auth";
 
 /**
  * Creates a new user in the database using the given form data
@@ -150,14 +151,7 @@ export async function createCourse(formData: FormData) {
     return code;
   };
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    redirect("/login");
-  }
+  const { supabase, user } = await requireUser()
 
   const name = formData.get("courseName") as string;
   const randomCode = generateCode();
@@ -244,14 +238,7 @@ async function insertAssignmentProblems(
  *          successfully created
  */
 export async function createAssignment(formData: FormData, courseId: UUID) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    redirect("/login");
-  }
+  const { supabase } = await requireUser()
 
   const assignmentId = crypto.randomUUID();
 
@@ -298,14 +285,7 @@ export async function createAssignment(formData: FormData, courseId: UUID) {
  *          successfully created
  */
 export async function enrollInCourse(formData: FormData) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    redirect("/login");
-  }
+  const { supabase, user } = await requireUser()
 
   const { data: course, error: courseError } = await supabase
     .from("courses")
