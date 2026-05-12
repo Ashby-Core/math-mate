@@ -40,10 +40,9 @@ const TopicMasteriesChart = ({
     const fetchMasteries = async () => {
       const supabase = createClient();
       const { data: relevantTopicsData, error: topicsError } = await supabase
-        .from("course_topics")
+        .from("topics")
         .select("*")
-        .eq("course_id", courseId)
-        .order("order_index", { ascending: true });
+        .eq("course_id", courseId);
       const { data: topicMasteriesData, error: masteriesError } = await supabase
         .from("student_topic_masteries")
         .select("*")

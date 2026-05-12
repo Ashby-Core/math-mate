@@ -298,7 +298,7 @@ export async function enrollInCourse(formData: FormData) {
   }
 
   const { error } = await supabase.from("enrollments").insert({
-    student_id: user.id,
+    profile_id: user.id,
     course_id: course.id,
   });
 
