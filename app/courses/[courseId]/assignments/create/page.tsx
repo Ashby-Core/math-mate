@@ -27,7 +27,7 @@ import {
   ComboboxContent,
   ComboboxList,
   ComboboxItem,
-} from "@/components/ui/combobox";
+} from "@/app/components/ui/combobox";
 
 export default function CreateAssignment({
   params,
