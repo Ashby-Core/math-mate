@@ -1,6 +1,4 @@
-import { Course, Profile } from "@/app/types";
-import { createClient } from "@/utils/supabase/server";
-import { getProfileById } from "@/app/queries/profiles";
+import { Profile } from "@/app/types";
 import { PersonStanding } from "lucide-react";
 import React from "react";
 import {
@@ -11,27 +9,10 @@ import {
 } from "@/app/components/ui/card";
 
 interface StudentsProps {
-  course: Course;
+  students: Profile[];
 }
 
-const Students = async ({ course }: StudentsProps) => {
-  const supabase = await createClient();
-
-  const { data: enrollments } = await supabase
-    .from("enrollments")
-    .select("*")
-    .eq("course_id", course.id);
-
-  const students: Profile[] = [];
-  if (enrollments) {
-    for (const enrollment of enrollments) {
-      const student = await getProfileById(supabase, enrollment.student_id);
-      if (student) {
-        students.push(student);
-      }
-    }
-  }
-
+const Students = ({ students }: StudentsProps) => {
   return (
     <Card>
       <CardHeader className="border-b">
@@ -39,11 +20,11 @@ const Students = async ({ course }: StudentsProps) => {
       </CardHeader>
 
       <CardContent>
-        {students && students.length > 0 ? (
+        {students.length > 0 ? (
           <div className="space-y-3">
             {students.map((student) => (
               <Card
-                key={student.firstName}
+                key={student.id}
                 size="sm"
                 className="hover:bg-muted/50 transition-colors"
               >

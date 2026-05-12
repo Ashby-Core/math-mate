@@ -1,8 +1,9 @@
 import Assignments from "@/app/courses/[courseId]/Assignments";
 import UserNavbar from "@/app/UserNavbar";
 import Students from "@/app/courses/[courseId]/Students";
-import { Course } from "@/app/types";
+import { Course, Profile } from "@/app/types";
 import { requireUser } from "@/app/queries/auth";
+import { getCourseStudents } from "@/app/queries/enrollments";
 import { getProfileById } from "@/app/queries/profiles";
 import TopicMasteriesChart from "@/app/courses/[courseId]/TopicMasteries";
 import {
@@ -38,24 +39,9 @@ export default async function CoursePage({
     code: courseData.code,
   };
 
-  const students = [];
-
-  if (userIsTeacher) {
-    const { data: studentsInCourse } = await supabase
-      .from("enrollments")
-      .select("*")
-      .eq("course_id", course.id);
-
-    if (studentsInCourse) {
-      for (let i = 0; i < studentsInCourse.length; i += 1) {
-        const { data: student } = await supabase
-          .from("student_profiles")
-          .select("*")
-          .eq("id", studentsInCourse[i]);
-        students.push(student);
-      }
-    }
-  }
+  const students: Profile[] = userIsTeacher
+    ? await getCourseStudents(supabase, course.id)
+    : [];
 
   const { data: assignments } = await supabase
     .from("assignments")
@@ -98,7 +84,7 @@ export default async function CoursePage({
         >
           <Assignments course={course} userIsTeacher={userIsTeacher} />
           <div>
-            {userIsTeacher ? <Students course={course} /> : <></>}
+            {userIsTeacher && <Students students={students} />}
 
             {/* Quick Stats */}
             {userIsTeacher && (
