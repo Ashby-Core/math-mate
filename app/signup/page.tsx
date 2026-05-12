@@ -9,7 +9,7 @@ import {
   ComboboxItem,
   ComboboxEmpty,
 } from "@/components/ui/combobox";
-import { signup } from "../actions/actions";
+import { signup } from "../queries/actions";
 
 const demographicOptions = [
   "white",

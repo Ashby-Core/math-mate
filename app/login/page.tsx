@@ -1,6 +1,6 @@
 import { Input } from "@/app/components/ui/input";
 import { Button } from "@/app/components/ui/button";
-import { login } from "../actions/actions";
+import { login } from "../queries/actions";
 
 export default function LoginPage() {
   return (

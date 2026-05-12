@@ -1,4 +1,4 @@
-import { enrollInCourse } from "@/app/actions/actions";
+import { enrollInCourse } from "@/app/queries/actions";
 import UserNavbar from "@/app/UserNavbar";
 import CourseCard from "@/app/dashboard/CourseCard";
 import EnrollInCourse from "@/app/dashboard/student/EnrollInCourse";

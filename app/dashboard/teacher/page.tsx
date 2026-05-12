@@ -3,7 +3,7 @@ import UserNavbar from "@/app/UserNavbar";
 import { Course, Profile } from "@/app/types";
 import { redirect } from "next/navigation";
 import AddCourse from "@/app/dashboard/teacher/AddCourse";
-import { createCourse } from "@/app/actions/actions";
+import { createCourse } from "@/app/queries/actions";
 import CourseCard from "@/app/dashboard/CourseCard";
 
 const TeacherPage = async () => {

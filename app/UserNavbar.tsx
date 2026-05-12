@@ -1,6 +1,6 @@
 import React from "react";
 import Logo from "../public/Logo";
-import { logout } from "@/app/actions/actions";
+import { logout } from "@/app/queries/actions";
 import { Button } from "@/app/components/ui/button";
 import {
   NavigationMenu,

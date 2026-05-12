@@ -6,7 +6,7 @@ import { createClient } from "@/utils/supabase/client";
 import { redirect } from "next/navigation";
 import React, { use, useEffect, useState } from "react";
 import ProblemsManager from "@/app/courses/[courseId]/assignments/create/ProblemsManager";
-import { createAssignment } from "@/app/actions/actions";
+import { createAssignment } from "@/app/queries/actions";
 import { UUID } from "crypto";
 import {
   Card,
