@@ -5,6 +5,7 @@ import UserNavbar from "@/app/UserNavbar";
 import Students from "@/app/courses/[courseId]/Students";
 import { Profile } from "@/app/types";
 import { requireUser } from "@/app/queries/auth";
+import { getAssignmentsByCourse } from "@/app/queries/assignments";
 import { getCourseById } from "@/app/queries/courses";
 import { getCourseStudents } from "@/app/queries/enrollments";
 import { getProfileById } from "@/app/queries/profiles";
@@ -37,10 +38,7 @@ export default async function CoursePage({
     ? await getCourseStudents(supabase, course.id)
     : [];
 
-  const { data: assignments } = await supabase
-    .from("assignments")
-    .select("*")
-    .eq("course", course.id);
+  const assignments = await getAssignmentsByCourse(supabase, course.id);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -76,7 +74,10 @@ export default async function CoursePage({
             userIsTeacher ? "grid grid-cols-1 lg:grid-cols-3 gap-8" : ""
           }
         >
-          <Assignments course={course} userIsTeacher={userIsTeacher} />
+          <Assignments
+            assignments={assignments}
+            userIsTeacher={userIsTeacher}
+          />
           <div>
             {userIsTeacher && <Students students={students} />}
 
@@ -93,7 +94,7 @@ export default async function CoursePage({
                         Total Assignments
                       </span>
                       <span className="font-medium text-gray-900">
-                        {assignments?.length || 0}
+                        {assignments.length}
                       </span>
                     </div>
                     <div className="flex justify-between items-center">
