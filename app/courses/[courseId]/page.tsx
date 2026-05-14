@@ -1,8 +1,11 @@
+import { notFound } from "next/navigation";
+
 import Assignments from "@/app/courses/[courseId]/Assignments";
 import UserNavbar from "@/app/UserNavbar";
 import Students from "@/app/courses/[courseId]/Students";
-import { Course, Profile } from "@/app/types";
+import { Profile } from "@/app/types";
 import { requireUser } from "@/app/queries/auth";
+import { getCourseById } from "@/app/queries/courses";
 import { getCourseStudents } from "@/app/queries/enrollments";
 import { getProfileById } from "@/app/queries/profiles";
 import TopicMasteriesChart from "@/app/courses/[courseId]/TopicMasteries";
@@ -23,21 +26,12 @@ export default async function CoursePage({
   const { supabase, user } = await requireUser();
 
   const profile = await getProfileById(supabase, user.id);
-
   const userIsTeacher = profile?.userRole === "teacher";
 
-  const { data: courseData } = await supabase
-    .from("courses")
-    .select("*")
-    .eq("id", courseId)
-    .single();
-  const course: Course = {
-    id: courseData.id,
-    createdAt: courseData.created_at,
-    teacher: courseData.teacher,
-    name: courseData.name,
-    code: courseData.code,
-  };
+  const course = await getCourseById(supabase, courseId);
+  if (!course) {
+    notFound();
+  }
 
   const students: Profile[] = userIsTeacher
     ? await getCourseStudents(supabase, course.id)
