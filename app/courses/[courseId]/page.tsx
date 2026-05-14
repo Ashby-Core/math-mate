@@ -9,7 +9,7 @@ import { getAssignmentsByCourse } from "@/app/queries/assignments";
 import { getCourseById } from "@/app/queries/courses";
 import { getCourseStudents } from "@/app/queries/enrollments";
 import { getProfileById } from "@/app/queries/profiles";
-import TopicMasteriesChart from "@/app/courses/[courseId]/TopicMasteries";
+import TopicMasteriesChart from "@/app/courses/[courseId]/TopicMasteriesChart";
 import {
   Card,
   CardHeader,
