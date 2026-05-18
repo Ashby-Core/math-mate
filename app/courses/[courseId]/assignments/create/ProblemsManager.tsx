@@ -24,6 +24,8 @@ const ProblemsManager = ({
       id: crypto.randomUUID() as UUID,
       questionContent: "",
       correctAnswer: "",
+      orderIndex: problems.length,
+      tops: [],
     };
   };
 
@@ -53,6 +55,13 @@ const ProblemsManager = ({
       problem.id === id
         ? { ...problem, correctAnswer: event.target.value }
         : problem,
+    );
+    setProblems(updatedProblems);
+  };
+
+  const setProblemTopics = (id: UUID, topicIds: UUID[]) => {
+    const updatedProblems = problems.map((problem) =>
+      problem.id === id ? { ...problem, tops: topicIds } : problem,
     );
     setProblems(updatedProblems);
   };
@@ -141,8 +150,10 @@ const ProblemsManager = ({
                 <div className="ml-8 mr-8">
                   <ProblemEdit
                     problem={problem}
+                    availableTopics={topics}
                     setQuestionContent={setNewQuestionContent}
                     setCorrectAnswer={setNewCorrectAnswer}
+                    setProblemTopics={setProblemTopics}
                   />
                 </div>
               </div>

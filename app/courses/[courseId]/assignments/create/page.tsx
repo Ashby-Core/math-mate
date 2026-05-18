@@ -18,16 +18,6 @@ import {
 import { Input } from "@/app/components/ui/input";
 import { Textarea } from "@/app/components/ui/textarea";
 import { Button } from "@/app/components/ui/button";
-import {
-  Combobox,
-  ComboboxChips,
-  ComboboxChip,
-  ComboboxChipsInput,
-  ComboboxValue,
-  ComboboxContent,
-  ComboboxList,
-  ComboboxItem,
-} from "@/app/components/ui/combobox";
 
 export default function CreateAssignment({
   params,
@@ -36,7 +26,6 @@ export default function CreateAssignment({
 }) {
   const { courseId } = use(params);
   const [availableTopics, setAvailableTopics] = useState<Topic[]>([]);
-  const [selectedTopics, setSelectedTopics] = useState<Topic[]>([]);
   const [problems, setProblems] = useState<Problem[]>([]);
 
   useEffect(() => {
@@ -51,10 +40,9 @@ export default function CreateAssignment({
       }
 
       const { data } = await supabase
-        .from("course_topics")
+        .from("topics")
         .select("*")
-        .eq("course_id", courseId)
-        .order("order_index", { ascending: true });
+        .eq("course_id", courseId);
 
       const topics = [];
 
@@ -64,8 +52,6 @@ export default function CreateAssignment({
             id: topic.id,
             courseId: topic.course_id,
             name: topic.name,
-            orderIndex: topic.order_index,
-            createdAt: topic.created_at,
           });
         }
       }
@@ -81,18 +67,23 @@ export default function CreateAssignment({
 
     const formData = new FormData(e.currentTarget);
 
-    const topicsString = selectedTopics.map((t) => t.id).join(",");
-    formData.append("topics", topicsString);
-
-    formData.append("problems", JSON.stringify(problems));
-
-    const result = await createAssignment(formData, courseId as UUID);
+    const result = await createAssignment({
+      courseId: courseId as UUID,
+      title: formData.get("title") as string,
+      dueDate: new Date(formData.get("dueDate") as string),
+      description: formData.get("description") as string,
+      problems: problems.map((problem, index) => ({
+        ...problem,
+        orderIndex: index,
+      })),
+    });
 
     if (result.success) {
       console.log("Assignment created successfully!");
       redirect(`/courses/${courseId}`);
     } else {
       alert("Error creating assignment");
+      console.log(result.error)
     }
   };
 
@@ -158,41 +149,6 @@ export default function CreateAssignment({
                       Due Date
                     </label>
                     <Input type="date" name="dueDate" id="dueDate" />
-                  </div>
-
-                  {/* Topics */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Topic(s)
-                    </label>
-                    <Combobox
-                      multiple
-                      value={selectedTopics}
-                      onValueChange={(v: Topic[]) => setSelectedTopics(v)}
-                      itemToStringLabel={(t: Topic) => t.name}
-                    >
-                      <ComboboxChips>
-                        <ComboboxValue>
-                          {(value: Topic[]) =>
-                            value.map((topic) => (
-                              <ComboboxChip key={topic.id}>
-                                {topic.name}
-                              </ComboboxChip>
-                            ))
-                          }
-                        </ComboboxValue>
-                        <ComboboxChipsInput />
-                      </ComboboxChips>
-                      <ComboboxContent>
-                        <ComboboxList>
-                          {availableTopics.map((topic) => (
-                            <ComboboxItem key={topic.id} value={topic}>
-                              {topic.name}
-                            </ComboboxItem>
-                          ))}
-                        </ComboboxList>
-                      </ComboboxContent>
-                    </Combobox>
                   </div>
 
                   {/* Description */}

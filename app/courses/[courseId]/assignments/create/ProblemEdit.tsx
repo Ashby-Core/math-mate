@@ -1,12 +1,23 @@
-import { Problem } from "@/app/types";
+import { Problem, Topic } from "@/app/types";
 import { UUID } from "crypto";
 import React from "react";
 import { CircleHelp, CircleCheck } from "lucide-react";
 import { Card, CardContent } from "@/app/components/ui/card";
 import { Textarea } from "@/app/components/ui/textarea";
+import {
+  Combobox,
+  ComboboxChips,
+  ComboboxChip,
+  ComboboxChipsInput,
+  ComboboxValue,
+  ComboboxContent,
+  ComboboxList,
+  ComboboxItem,
+} from "@/app/components/ui/combobox";
 
 interface ProblemEditProps {
   problem: Problem;
+  availableTopics: Topic[];
   setQuestionContent: (
     event: React.ChangeEvent<HTMLTextAreaElement>,
     id: UUID,
@@ -15,13 +26,20 @@ interface ProblemEditProps {
     event: React.ChangeEvent<HTMLTextAreaElement>,
     id: UUID,
   ) => void;
+  setProblemTopics: (id: UUID, topicIds: UUID[]) => void;
 }
 
 const ProblemEdit = ({
   problem,
+  availableTopics,
   setQuestionContent,
   setCorrectAnswer,
+  setProblemTopics,
 }: ProblemEditProps) => {
+  const selectedTopics = availableTopics.filter((t) =>
+    problem.tops.includes(t.id),
+  );
+
   return (
     <Card className="ring-blue-200">
       <CardContent className="space-y-6">
@@ -62,6 +80,44 @@ const ProblemEdit = ({
               {problem.correctAnswer.length}/500
             </div>
           </div>
+        </div>
+
+        {/* Topics Section */}
+        <div className="space-y-3">
+          <label className="block text-sm font-medium text-gray-700">
+            Topic(s)
+          </label>
+          <Combobox
+            multiple
+            value={selectedTopics}
+            onValueChange={(v: Topic[]) =>
+              setProblemTopics(
+                problem.id,
+                v.map((t) => t.id),
+              )
+            }
+            itemToStringLabel={(t: Topic) => t.name}
+          >
+            <ComboboxChips>
+              <ComboboxValue>
+                {(value: Topic[]) =>
+                  value.map((topic) => (
+                    <ComboboxChip key={topic.id}>{topic.name}</ComboboxChip>
+                  ))
+                }
+              </ComboboxValue>
+              <ComboboxChipsInput />
+            </ComboboxChips>
+            <ComboboxContent>
+              <ComboboxList>
+                {availableTopics.map((topic) => (
+                  <ComboboxItem key={topic.id} value={topic}>
+                    {topic.name}
+                  </ComboboxItem>
+                ))}
+              </ComboboxList>
+            </ComboboxContent>
+          </Combobox>
         </div>
       </CardContent>
     </Card>

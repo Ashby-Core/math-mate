@@ -4,9 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { createClient } from "@/utils/supabase/server";
-import { UUID } from "crypto";
-import { SupabaseClient } from "@supabase/supabase-js";
-import { Problem } from "../types";
+import { CreateAssignmentInput } from "../types";
 import { requireUser } from "./auth";
 
 /**
@@ -165,70 +163,6 @@ export async function createCourse(formData: FormData) {
   }
 }
 
-async function insertAssignment(
-  supabase: SupabaseClient,
-  assignmentId: string,
-  courseId: UUID,
-  formData: FormData
-) {
-  const { error } = await supabase.from("assignments").insert({
-    id: assignmentId,
-    course: courseId,
-    title: formData.get("title"),
-    due_date: formData.get("dueDate"),
-    description: formData.get("description"),
-  });
-
-  if (error) {
-    console.error(error);
-    return { error: error.message };
-  }
-
-  return { success: true };
-}
-
-async function insertAssignmentTopics(
-  supabase: SupabaseClient,
-  assignmentId: string,
-  topics: string[]
-) {
-  for (const topicId of topics) {
-    const { error } = await supabase.from("assignment_topics").insert({
-      assignment_id: assignmentId,
-      topic_id: topicId,
-    });
-
-    if (error) {
-      console.error(error);
-      return { error: error.message };
-    }
-  }
-
-  return { success: true };
-}
-
-async function insertAssignmentProblems(
-  supabase: SupabaseClient,
-  assignmentId: string,
-  problems: Problem[]
-) {
-  for (const problem of problems) {
-    const { error } = await supabase.from("assignment_problems").insert({
-      id: problem.id,
-      assignment_id: assignmentId,
-      question_content: problem.questionContent,
-      correct_answer: problem.correctAnswer,
-    });
-
-    if (error) {
-      console.error(error);
-      return { error: error.message };
-    }
-  }
-
-  return { success: true };
-}
-
 /**
  * Creates a new assignment with the given data and course it is a part of
  * @param formData the data containing information about the assignment, including
@@ -237,44 +171,20 @@ async function insertAssignmentProblems(
  * @returns an object that either contains an error message if the course cannot be created, or an indicator that the course has been
  *          successfully created
  */
-export async function createAssignment(formData: FormData, courseId: UUID) {
+export async function createAssignment(assignment: CreateAssignmentInput) {
   const { supabase } = await requireUser()
 
-  const assignmentId = crypto.randomUUID();
+  console.log(assignment.problems)
 
-  // Insert into assignments
-  const assignmentResult = await insertAssignment(
-    supabase,
-    assignmentId,
-    courseId,
-    formData
-  );
-  if (assignmentResult.error) {
-    return assignmentResult;
-  }
+  const { error } = await supabase.rpc("create_assignment", {
+    course_id_param: assignment.courseId,
+    title_param: assignment.title,
+    due_date_param: assignment.dueDate,
+    description_param: assignment.description,
+    problems_param: assignment.problems
+  });
 
-  // Insert into assignment_topics
-  const topics = (formData.get("topics") as string).split(",");
-  const topicsResult = await insertAssignmentTopics(
-    supabase,
-    assignmentId,
-    topics
-  );
-  if (topicsResult.error) {
-    return topicsResult;
-  }
-
-  // Insert into assignment_problems
-  const problems = JSON.parse(formData.get("problems") as string);
-  const problemsResult = await insertAssignmentProblems(
-    supabase,
-    assignmentId,
-    problems
-  );
-  if (problemsResult.error) {
-    return problemsResult;
-  }
-
+  if (error) return { error: error.message }
   return { success: true };
 }
 

@@ -45,19 +45,20 @@ export type Topic = {
   id: UUID;
   courseId: UUID;
   name: string;
-  orderIndex: number;
-  createdAt: Timestamp;
-};
-
-export type AssignmentTopic = {
-  id: UUID;
-  assignmentId: UUID;
-  topicId: UUID;
-  createdAt: Timestamp;
 };
 
 export interface Problem {
   id: UUID;
   questionContent: string;
   correctAnswer: string;
+  orderIndex: number;
+  tops: UUID[];
 }
+
+export type CreateAssignmentInput = {
+  courseId: UUID;
+  title: string;
+  dueDate: Date;
+  description: string;
+  problems: Problem[];
+};
