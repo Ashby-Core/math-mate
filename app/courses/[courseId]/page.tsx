@@ -3,7 +3,6 @@ import { notFound } from "next/navigation";
 import Assignments from "@/app/courses/[courseId]/Assignments";
 import UserNavbar from "@/app/UserNavbar";
 import Students from "@/app/courses/[courseId]/Students";
-import { Profile } from "@/app/types";
 import { requireUser } from "@/app/queries/auth";
 import { getAssignmentsByCourse } from "@/app/queries/assignments";
 import { getCourseById } from "@/app/queries/courses";
@@ -29,16 +28,15 @@ export default async function CoursePage({
   const profile = await getProfileById(supabase, user.id);
   const userIsTeacher = profile?.userRole === "teacher";
 
-  const course = await getCourseById(supabase, courseId);
+  const [course, students, assignments] = await Promise.all([
+    getCourseById(supabase, courseId),
+    userIsTeacher ? getCourseStudents(supabase, courseId) : [],
+    getAssignmentsByCourse(supabase, courseId)
+  ])
+
   if (!course) {
-    notFound();
+    notFound()
   }
-
-  const students: Profile[] = userIsTeacher
-    ? await getCourseStudents(supabase, course.id)
-    : [];
-
-  const assignments = await getAssignmentsByCourse(supabase, course.id);
 
   return (
     <div className="min-h-screen bg-gray-50">

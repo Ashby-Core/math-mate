@@ -45,6 +45,7 @@ export type Topic = {
   id: UUID;
   courseId: UUID;
   name: string;
+  createdAt: Timestamp;
 };
 
 export interface Problem {
