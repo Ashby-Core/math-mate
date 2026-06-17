@@ -1,6 +1,7 @@
 "use client";
 
 import { TopicMastery } from "@/app/types";
+import { getMasteries } from "@/app/queries/masteries";
 import { createClient } from "@/utils/supabase/client";
 import { UUID } from "crypto";
 import React, { useEffect, useState } from "react";
@@ -24,8 +25,8 @@ interface TopicMasteriesChartProps {
 }
 
 const chartConfig = {
-  masteryScore: {
-    label: "Mastery Score",
+  mastery: {
+    label: "Mastery",
     color: "var(--chart-1)",
   },
 } satisfies ChartConfig;
@@ -39,41 +40,7 @@ const TopicMasteriesChart = ({
   useEffect(() => {
     const fetchMasteries = async () => {
       const supabase = createClient();
-      const { data: relevantTopicsData, error: topicsError } = await supabase
-        .from("topics")
-        .select("*")
-        .eq("course_id", courseId);
-      const { data: topicMasteriesData, error: masteriesError } = await supabase
-        .from("student_topic_masteries")
-        .select("*")
-        .eq("student_id", studentId);
-
-      if (topicsError) {
-        console.error("Error fetching relevant topics");
-      }
-
-      if (masteriesError) {
-        console.error("Error fetching masteries data");
-      }
-
-      const masteries = [];
-
-      if (relevantTopicsData && topicMasteriesData) {
-        for (const topic of relevantTopicsData) {
-          const mastery = topicMasteriesData.find(
-            (entry) => entry.topic_id === topic.id,
-          );
-
-          masteries.push({
-            name: topic.name,
-            masteryScore: mastery.mastery_score,
-            problemsAttempted: mastery.problems_attempted,
-            problemsCorrect: mastery.problems_correct,
-          });
-        }
-      }
-
-      setTopicMasteries(masteries);
+      setTopicMasteries(await getMasteries(supabase, studentId, courseId));
     };
 
     fetchMasteries();
@@ -92,13 +59,9 @@ const TopicMasteriesChart = ({
           <BarChart data={topicMasteries}>
             <CartesianGrid vertical={false} strokeDasharray="3 3" />
             <XAxis dataKey="name" tickLine={false} axisLine={false} />
-            <YAxis tickLine={false} axisLine={false} />
+            <YAxis domain={[0, 1]} tickLine={false} axisLine={false} />
             <ChartTooltip content={<ChartTooltipContent />} />
-            <Bar
-              dataKey="masteryScore"
-              fill="var(--color-masteryScore)"
-              radius={4}
-            />
+            <Bar dataKey="mastery" fill="var(--color-mastery)" radius={4} />
           </BarChart>
         </ChartContainer>
       </CardContent>
