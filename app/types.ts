@@ -35,10 +35,43 @@ export type Enrollment = {
 };
 
 export type TopicMastery = {
+  topicId: UUID;
   name: string;
-  masteryScore: number;
+  mastery: number | null; // derived: attempted > 0 ? correct / attempted : null
   problemsAttempted: number;
   problemsCorrect: number;
+};
+
+export type TopicWeakness = {
+  id: UUID;
+  topicId: UUID;
+  name: string;
+  description: string;
+  observedCount: number;
+  lastObserved: Timestamp;
+};
+
+export type TutoringSession = {
+  id: UUID;
+  studentId: UUID;
+  problemId: UUID;
+  phase: "intro" | "gap_check" | "solve" | "review";
+  gapState: Record<string, unknown>;
+  status: "active" | "completed" | "abandoned";
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+};
+
+// Knowledge profile injected into the tutoring system prompt. Keyed by topic
+// id; each value carries the human-readable name so the model can name topics.
+export type TopicMasteryEntry = { name: string; mastery: number | null };
+export type TopicWeaknessEntry = { name: string; items: string[] };
+
+export type StudentProfile = {
+  courseName: string;
+  student: { id: string; name: string };
+  topicMasteryScores: Record<string, TopicMasteryEntry>;
+  weaknesses: Record<string, TopicWeaknessEntry>;
 };
 
 export type Topic = {
