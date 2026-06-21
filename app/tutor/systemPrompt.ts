@@ -1,18 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { Problem, StudentProfile } from "@/app/types";
-import { GAP_THRESHOLD } from "./constants";
-
-/**
- * Deterministic classification of a prerequisite topic from its derived mastery
- * (0–1 float or `null`). Mirrors the resolved gap decisions: below the threshold
- * is a gap to probe; `null` is unassessed and is NOT a gap; otherwise OK.
- */
-type TopicStatus = "GAP" | "OK" | "UNASSESSED";
-
-function classifyTopic(mastery: number | null): TopicStatus {
-  if (mastery === null) return "UNASSESSED";
-  return mastery < GAP_THRESHOLD ? "GAP" : "OK";
-}
+import { resolvePrerequisites } from "./gaps";
 
 /**
  * The static tutoring policy. Byte-identical for every student and every turn so
@@ -44,21 +32,20 @@ Style:
 function renderContext(profile: StudentProfile, problem: Problem): string {
   const firstName = profile.student.name.split(" ")[0] || "the student";
 
-  const topicLines = problem.tops.map((topicId) => {
-    const topic = profile.topicMasteryScores[topicId];
-    const name = topic?.name ?? `(unknown topic ${topicId})`;
-    const mastery = topic?.mastery ?? null;
-    const status = classifyTopic(mastery);
+  const topicLines = resolvePrerequisites(profile, problem).map((topic) => {
+    const name = topic.name ?? `(unknown topic ${topic.topicId})`;
     const masteryText =
-      mastery === null ? "not yet assessed" : `${Math.round(mastery * 100)}% mastery`;
+      topic.mastery === null
+        ? "not yet assessed"
+        : `${Math.round(topic.mastery * 100)}% mastery`;
 
-    const weakness = profile.weaknesses[topicId];
+    const weakness = profile.weaknesses[topic.topicId];
     const weaknessText =
       weakness && weakness.items.length > 0
         ? ` — known misconceptions: ${weakness.items.join("; ")}`
         : "";
 
-    return `- ${name} [${status}] (${masteryText})${weaknessText}`;
+    return `- ${name} [${topic.status}] (${masteryText})${weaknessText}`;
   });
 
   const topicsBlock =
