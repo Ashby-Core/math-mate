@@ -6,22 +6,25 @@ import { getMasteries } from "./masteries";
 import { getWeaknesses } from "./weaknesses";
 
 /**
- * KP-1: Assembles the student knowledge profile for a course by composing the
- * mastery and weakness query functions — it only shapes their output, it does
- * not re-implement any SQL or the mastery derivation.
+ * Builds the student knowledge profile for a course by composing the mastery
+ * and weakness query functions — it only shapes their output, it does not
+ * re-implement any SQL or the mastery derivation. Rebuilt fresh per problem (no
+ * caching) so mid-session misconception inferences are reflected the next time
+ * it runs. No Claude calls.
  *
  * Topics are keyed by topic id; each value carries the human-readable topic
  * name so the profile is meaningful to the tutoring model. Every course topic
  * appears in `topicMasteryScores` (mastery is `null` when the student hasn't
  * attempted it). `weaknesses` only includes topics that have recorded
- * weaknesses, grouped into a list of descriptions.
+ * weaknesses, grouped into a list of descriptions. The shape is stable even
+ * when the student has no data (empty maps, blank course/student fields).
  *
  * @param supabase the Supabase client
- * @param studentId the student whose profile to assemble
+ * @param studentId the student whose profile to build
  * @param courseId the course to scope the profile to
- * @returns the assembled StudentProfile (stable shape, never throws on missing data)
+ * @returns the StudentProfile to inject into the tutoring system prompt
  */
-export async function assembleProfile(
+export async function buildProfile(
   supabase: SupabaseClient,
   studentId: string,
   courseId: string,
@@ -54,23 +57,4 @@ export async function assembleProfile(
     topicMasteryScores,
     weaknesses: weaknessMap,
   };
-}
-
-/**
- * KP-2: Thin wrapper over assembleProfile. Rebuilt fresh per problem (no
- * caching) so mid-session misconception inferences are reflected the next time
- * the profile is built. Guarantees a stable shape even when the student has no
- * data (assembleProfile already defaults every field). No Claude calls.
- *
- * @param supabase the Supabase client
- * @param studentId the student whose profile to build
- * @param courseId the course to scope the profile to
- * @returns the StudentProfile to inject into the tutoring system prompt
- */
-export async function buildProfile(
-  supabase: SupabaseClient,
-  studentId: string,
-  courseId: string,
-): Promise<StudentProfile> {
-  return assembleProfile(supabase, studentId, courseId);
 }
