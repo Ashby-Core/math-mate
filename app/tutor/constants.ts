@@ -9,6 +9,13 @@ export const TUTOR_MODEL = "claude-sonnet-4-6";
 export const MISCONCEPTION_MODEL = "claude-haiku-4-5-20251001";
 
 /**
+ * Haiku model that runs the per-turn correctness judge in the conversation
+ * handler (TS-3) — a cheap structured classifier, separate from the Sonnet
+ * tutor reply.
+ */
+export const JUDGE_MODEL = "claude-haiku-4-5";
+
+/**
  * Mastery below this value (and not `null`) marks a prerequisite topic as a
  * "gap" the tutor must probe before unlocking the problem. `null` mastery means
  * the topic is unassessed and is deliberately NOT treated as a gap.

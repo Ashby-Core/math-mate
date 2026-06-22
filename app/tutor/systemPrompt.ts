@@ -1,6 +1,18 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { Problem, StudentProfile } from "@/app/types";
 import { resolvePrerequisites } from "./gaps";
+import type { GapEntry, Phase } from "./stateMachine";
+
+/**
+ * Per-turn state the tutor needs to act in the current phase. Supplied by the
+ * conversation handler (TS-3); omit it for a phase-agnostic prompt.
+ */
+export type TurnContext = {
+  phase: Phase;
+  currentGap: GapEntry | null;
+  resolvedCount: number;
+  totalGaps: number;
+};
 
 /**
  * The static tutoring policy. Byte-identical for every student and every turn so
@@ -70,27 +82,60 @@ ${topicsBlock}`;
 }
 
 /**
- * TS-1 — builds the Sonnet system prompt for a tutoring session by merging the
- * student knowledge profile (KP-2) with the current problem. Pure and
+ * Renders the per-turn instruction telling the tutor which phase it is acting in
+ * right now and, in gap_check, which gap to probe. Volatile (changes each turn),
+ * so it lives in its own uncached block after the cached prefix.
+ */
+function renderTurn(turn: TurnContext): string {
+  let line: string;
+  switch (turn.phase) {
+    case "intro":
+      line = "Greet the student and set up the session. Do not show the problem yet.";
+      break;
+    case "gap_check":
+      line = turn.currentGap
+        ? `Probe this gap now: "${turn.currentGap.name}" (${turn.resolvedCount} of ${turn.totalGaps} gaps resolved). Give ONE mini-lesson and ONE follow-up question for THIS gap only.`
+        : "All gaps are resolved. Move the student toward the problem.";
+      break;
+    case "solve":
+      line =
+        "All gaps are resolved and the problem is unlocked. Scaffold the student through it step by step — never state the final answer.";
+      break;
+    case "review":
+      line =
+        "The student reached the correct answer. Give a brief, encouraging recap of what they did and the key idea — this ends the session.";
+      break;
+  }
+  return `## Current turn
+
+You are in the **${turn.phase}** phase. ${line}`;
+}
+
+/**
+ * Builds the Sonnet system prompt for a tutoring session by merging the
+ * student knowledge profile with the current problem. Pure and
  * deterministic: same inputs always produce the same blocks (snapshot-testable).
  *
- * Returns two system content blocks so the static tutoring policy can be cached
- * as a stable prefix while the per-session context follows uncached:
+ * Returns system content blocks so the static tutoring policy can be cached as a
+ * stable prefix while the volatile content follows uncached:
  *   [0] static rules (with `cache_control: ephemeral`)
  *   [1] dynamic session context (student, problem, prerequisite topic status)
+ *   [2] current-turn instruction — only when `turn` is supplied
  *
- * Does NOT call Claude — the actual request is made by the conversation handler
- * (TS-3), which passes these blocks straight to the `system` parameter.
+ * Does NOT call Claude — the actual request is made by the conversation handler,
+ * which passes these blocks straight to the `system` parameter.
  *
  * @param profile the student knowledge profile from `buildProfile`
  * @param problem the problem the student is working on this session
+ * @param turn optional per-turn phase/gap context; omit for a phase-agnostic prompt
  * @returns the system content blocks for the Anthropic Messages `system` field
  */
 export function buildSystemPrompt(
   profile: StudentProfile,
   problem: Problem,
+  turn?: TurnContext,
 ): Anthropic.TextBlockParam[] {
-  return [
+  const blocks: Anthropic.TextBlockParam[] = [
     {
       type: "text",
       text: STATIC_RULES,
@@ -101,4 +146,10 @@ export function buildSystemPrompt(
       text: renderContext(profile, problem),
     },
   ];
+
+  if (turn) {
+    blocks.push({ type: "text", text: renderTurn(turn) });
+  }
+
+  return blocks;
 }

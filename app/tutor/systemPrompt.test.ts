@@ -111,3 +111,43 @@ describe("buildSystemPrompt", () => {
     expect(blocks).toMatchSnapshot();
   });
 });
+
+describe("buildSystemPrompt — turn context (TS-3)", () => {
+  const profile: StudentProfile = {
+    courseName: "Intro to Fractions",
+    student: { id: "student-1", name: "Ada Lovelace" },
+    topicMasteryScores: { [FRACTIONS]: { name: "Adding Fractions", mastery: 0.3 } },
+    weaknesses: {},
+  };
+
+  it("omits the turn block when no turn context is given", () => {
+    expect(buildSystemPrompt(profile, makeProblem([FRACTIONS]))).toHaveLength(2);
+  });
+
+  it("appends an uncached gap_check turn block naming the current gap", () => {
+    const blocks = buildSystemPrompt(profile, makeProblem([FRACTIONS]), {
+      phase: "gap_check",
+      currentGap: { topicId: FRACTIONS, name: "Adding Fractions", resolved: false },
+      resolvedCount: 0,
+      totalGaps: 2,
+    });
+
+    expect(blocks).toHaveLength(3);
+    expect(blocks[2].cache_control).toBeUndefined();
+    expect(blocks[2].text).toContain("gap_check");
+    expect(blocks[2].text).toContain('Probe this gap now: "Adding Fractions"');
+    expect(blocks[2].text).toContain("0 of 2 gaps resolved");
+  });
+
+  it("frames the review turn as a session-ending recap", () => {
+    const blocks = buildSystemPrompt(profile, makeProblem([FRACTIONS]), {
+      phase: "review",
+      currentGap: null,
+      resolvedCount: 1,
+      totalGaps: 1,
+    });
+
+    expect(blocks[2].text).toContain("recap");
+    expect(blocks[2].text).toContain("ends the session");
+  });
+});
