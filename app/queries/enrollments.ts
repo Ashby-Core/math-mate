@@ -33,6 +33,35 @@ export async function getEnrolledCoursesForStudent(
 }
 
 /**
+ * Whether the given student is enrolled in the given course. Used to authorize
+ * a student before starting a tutoring session on one of the course's problems
+ * (problems are publicly readable under RLS, so enrollment is the access gate).
+ * @param supabase the Supabase client
+ * @param studentId the student to check
+ * @param courseId the course to check membership in
+ * @returns true if an enrollment row exists, false otherwise (or on error)
+ */
+export async function isStudentEnrolled(
+  supabase: SupabaseClient,
+  studentId: string,
+  courseId: string,
+): Promise<boolean> {
+  const { data, error } = await supabase
+    .from("enrollments")
+    .select("id")
+    .eq("profile_id", studentId)
+    .eq("course_id", courseId)
+    .limit(1);
+
+  if (error) {
+    console.error("Error checking enrollment:", error.message);
+    return false;
+  }
+
+  return (data?.length ?? 0) > 0;
+}
+
+/**
  * Fetches every student enrolled in the given course in a single query, joining
  * enrollments → profiles. Returns an empty array on error.
  * @param supabase The supabase client required to fetch the students
