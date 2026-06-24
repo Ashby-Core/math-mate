@@ -49,15 +49,24 @@ export type Sidebar = {
 
 export type DisplayMessage = { role: "user" | "assistant"; content: string };
 
-export type SessionResponse = {
-  sessionId: string;
+/**
+ * The post-turn state the client needs to re-render: phase, lock state, gap
+ * progress, the (possibly newly-revealed) problem, and the sidebar. This is the
+ * `meta` frame the streaming turn endpoint (API-1) sends first, and also the
+ * non-transcript core of the bootstrap response (API-2).
+ */
+export type TurnMeta = {
   phase: Phase;
   status: SessionStatus;
   unlocked: boolean;
   problem: ApiProblem;
   gaps: GapEntry[];
-  messages: DisplayMessage[];
   sidebar: Sidebar;
+};
+
+export type SessionResponse = TurnMeta & {
+  sessionId: string;
+  messages: DisplayMessage[];
 };
 
 function contentToString(content: Anthropic.MessageParam["content"]): string {
@@ -165,6 +174,23 @@ export function toDisplayMessages(
     .map((m) => ({ role: m.role, content: contentToString(m.content) }));
 }
 
+/** The non-transcript post-turn payload (shared by API-1's meta frame and API-2). */
+export function toTurnMeta(args: {
+  state: TutoringState;
+  profile: StudentProfile;
+  problem: Problem;
+}): TurnMeta {
+  const { state, profile, problem } = args;
+  return {
+    phase: state.phase,
+    status: state.status,
+    unlocked: isProblemUnlocked(state),
+    problem: toApiProblem(profile, problem, state),
+    gaps: state.gaps,
+    sidebar: toSidebar(profile, problem, state),
+  };
+}
+
 /** Composes the full bootstrap/turn response from internal state. */
 export function toSessionResponse(args: {
   sessionId: string;
@@ -176,12 +202,7 @@ export function toSessionResponse(args: {
   const { sessionId, state, profile, problem, history } = args;
   return {
     sessionId,
-    phase: state.phase,
-    status: state.status,
-    unlocked: isProblemUnlocked(state),
-    problem: toApiProblem(profile, problem, state),
-    gaps: state.gaps,
+    ...toTurnMeta({ state, profile, problem }),
     messages: toDisplayMessages(history),
-    sidebar: toSidebar(profile, problem, state),
   };
 }

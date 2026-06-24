@@ -15,6 +15,12 @@ import {
 /** A session row reduced to its persisted state plus the row id. */
 export type SessionRow = { id: string } & PersistedTutoringState;
 
+/** A session row plus its ownership keys (for the turn endpoint's auth + problem load). */
+export type OwnedSessionRow = SessionRow & {
+  studentId: string;
+  problemId: string;
+};
+
 /** createSession outcome: the new id, or a conflict to resume, or null on error. */
 export type CreateSessionResult = { id: string } | { conflict: true };
 
@@ -50,6 +56,39 @@ export async function getActiveSession(
     phase: row.phase as Phase,
     status: row.status as SessionStatus,
     gapState: (row.gap_state ?? { gaps: [] }) as { gaps: GapEntry[] },
+  };
+}
+
+/**
+ * A single session by its id, including the student/problem it belongs to, or
+ * null if not found. The turn endpoint uses `studentId` to authorize the
+ * caller and `problemId` to load the problem. Note: returns the row regardless of
+ * `status` (a completed session must still resolve for the auth check); callers
+ * gate on `status` themselves.
+ */
+export async function getSessionById(
+  supabase: SupabaseClient,
+  sessionId: string,
+): Promise<OwnedSessionRow | null> {
+  const { data, error } = await supabase
+    .from("tutoring_sessions")
+    .select("id, student_id, problem_id, phase, status, gap_state")
+    .eq("id", sessionId)
+    .maybeSingle();
+
+  if (error) {
+    console.error("Error fetching session by id:", error.message);
+    return null;
+  }
+  if (!data) return null;
+
+  return {
+    id: data.id,
+    studentId: data.student_id,
+    problemId: data.problem_id,
+    phase: data.phase as Phase,
+    status: data.status as SessionStatus,
+    gapState: (data.gap_state ?? { gaps: [] }) as { gaps: GapEntry[] },
   };
 }
 
@@ -112,3 +151,4 @@ export async function updateSessionState(
 
   return true;
 }
+
