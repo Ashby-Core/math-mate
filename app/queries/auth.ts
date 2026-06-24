@@ -21,3 +21,23 @@ export async function requireUser() {
 
   return { supabase, user };
 }
+
+/**
+ * API-friendly variant of {@link requireUser}: loads the server client and
+ * authenticated user but returns `null` instead of redirecting when there is no
+ * session, so route handlers can respond with a 401 JSON error to `fetch`/curl
+ * clients rather than serving the login page.
+ * @returns the supabase client and user, or `null` if unauthenticated
+ */
+export async function requireUserApi() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return null;
+  }
+
+  return { supabase, user };
+}
