@@ -1,4 +1,5 @@
 import { SupabaseClient } from "@supabase/supabase-js";
+import { ProblemStatus } from "@/app/types";
 import {
   GapEntry,
   Phase,
@@ -121,6 +122,50 @@ export async function createSession(
   }
 
   return { id: data.id };
+}
+
+// Status precedence when a problem has more than one session row: a completed
+// session outranks an active one, which outranks an abandoned one.
+const STATUS_RANK: Record<ProblemStatus, number> = {
+  completed: 3,
+  active: 2,
+  abandoned: 1,
+};
+
+/**
+ * Maps each of an assignment's problems that the student has a session for to
+ * its status (problemId → status). Problems with no session are simply absent
+ * from the map ("not started"). Used by the assignment page to label each
+ * problem's CTA (Start / Continue / Review).
+ *
+ * Sessions link to a problem, not an assignment, so this filters via an inner
+ * join to `problems` on `assignment_id`.
+ */
+export async function getSessionStatusesByAssignment(
+  supabase: SupabaseClient,
+  studentId: string,
+  assignmentId: string,
+): Promise<Record<string, ProblemStatus>> {
+  const { data, error } = await supabase
+    .from("tutoring_sessions")
+    .select("problem_id, status, problems!inner(assignment_id)")
+    .eq("student_id", studentId)
+    .eq("problems.assignment_id", assignmentId);
+
+  if (error || !data) {
+    console.error("Error fetching session statuses:", error?.message);
+    return {};
+  }
+
+  const statuses: Record<string, ProblemStatus> = {};
+  for (const row of data) {
+    const status = row.status as ProblemStatus;
+    const current = statuses[row.problem_id];
+    if (!current || STATUS_RANK[status] > STATUS_RANK[current]) {
+      statuses[row.problem_id] = status;
+    }
+  }
+  return statuses;
 }
 
 /**
