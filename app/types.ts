@@ -89,6 +89,20 @@ export interface Problem {
   tops: UUID[];
 }
 
+// A problem as shown in an assignment's problem list. Deliberately omits
+// `questionContent` and `correctAnswer`
+// (must never reach the client). Topics are named so the list can preview
+// what a problem practices without revealing the problem itself.
+export type ProblemListItem = {
+  id: UUID;
+  orderIndex: number;
+  topics: { id: UUID; name: string }[];
+};
+
+// Per-problem tutoring status for a student, keyed by problem id. Absence of a
+// key means "not started" (no session row yet).
+export type ProblemStatus = "active" | "completed" | "abandoned";
+
 export type CreateAssignmentInput = {
   courseId: UUID;
   title: string;

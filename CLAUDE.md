@@ -62,6 +62,14 @@ This is the core. No HTTP, no direct DB — dependencies (the Anthropic client, 
 Server-component pages under `app/dashboard`, `app/courses`, `app/login`, etc.; shared shadcn/Radix primitives in `app/components/ui/`; Recharts for mastery charts. The tutoring UI (Milestone 4, `FE-*` tickets) is not built yet.
 
 ## Conventions worth knowing
+- **Never reference ticket names/IDs (e.g. `FE-1`, `TS-3`) in code or comments.** Tickets live in `TICKETS.md`; code comments should describe behavior, not roadmap provenance.
+- **Branch naming:**
+  - Feature: `feat/<TICKET-ID>-short-description` (e.g. `feat/FE-1-split-layout-shell`)
+  - Bug fix: `fix/short-description`
+  - Chore / setup: `chore/short-description`
+- **Commit messages:** `type(scope): short description`
+  - Types: `feat`, `fix`, `chore`, `docs`, `refactor`, `test`
+  - Example: `feat(booking): add availability calendar component`
 - The misconception pipeline (`app/queries/claude.ts::inferMisconception`) is currently a **no-op stub** always returning `null`. `conversation.ts` already calls it on wrong answers; Milestone 5 replaces the body and wires the async write path. Don't assume it does anything yet.
 - When adding a query function, follow the existing shape: typed return, `console.error` + return empty/null on Supabase error, use the injected/SSR client — and add a colocated `*.test.ts`.
 - Keep Claude models and thresholds in `app/tutor/constants.ts`, not inline.
