@@ -74,7 +74,7 @@ export default function TutorShell({ problemId }: { problemId: string }) {
   const session = state.data;
 
   return (
-    <div className="flex flex-1 flex-col gap-4 p-4 lg:h-[calc(100dvh-4rem)] lg:flex-row lg:overflow-hidden">
+    <div className="flex min-h-0 flex-1 flex-col gap-4 p-4 lg:flex-row lg:overflow-hidden">
       {/* Chat column — the primary work surface. */}
       <section className="flex min-h-0 flex-1 flex-col">
         <SessionHeader session={session} />

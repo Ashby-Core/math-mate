@@ -15,7 +15,7 @@ export default async function TutorPage({
   await requireUser();
 
   return (
-    <div className="flex min-h-screen flex-col bg-gray-50">
+    <div className="flex min-h-screen flex-col bg-gray-50 lg:h-dvh lg:overflow-hidden">
       <UserNavbar />
       <TutorShell problemId={problemId} />
     </div>
