@@ -61,14 +61,14 @@ inference) · shadcn/ui + Radix + Tailwind 4 + Recharts.
 ## Milestone 2 — Tutoring brain
 *Exit: Intro → Gap check → Solve → Review runs correctly given an input message (no UI).*
 
-- [ ] **TS-1** · P0 · M — System prompt builder
+- [x] **TS-1** · P0 · M — System prompt builder
   - Merges profile (KP-2) + current problem; encodes probe-gaps-first, one mini-lesson per gap, scaffold not answer.
   - Snapshot-tested. Model `claude-sonnet-4-6`; consider prompt caching for the static block.
-- [ ] **TS-2** · P0 · L — Phase state machine *(resolve threshold + prerequisite-mapping decisions first)*
+- [x] **TS-2** · P0 · L — Phase state machine *(resolve threshold + prerequisite-mapping decisions first)*
   - Gap topics = prerequisites with mastery below threshold. `null` (unassessed) is **not** a gap — don't probe it.
   - Gap check: one mini-lesson + one follow-up per gap; one correct answer resolves it.
   - Problem gated until all gaps resolved; transitions deterministic and serializable.
-- [ ] **TS-3** · P0 · L — Conversation handler *(stub the MI trigger as a no-op for now)*
+- [x] **TS-3** · P0 · L — Conversation handler *(stub the MI trigger as a no-op for now)*
   - Takes message + state → Sonnet reply + updated phase.
   - Detects correct/incorrect follow-up answers; on wrong answer fires MI pipeline (stubbed).
   - On completion: mastery update + summary.
@@ -76,19 +76,19 @@ inference) · shadcn/ui + Radix + Tailwind 4 + Recharts.
 ## Milestone 3 — Wire it to HTTP
 *Exit: full session drivable via curl/Postman.*
 
-- [ ] **API-2** · P0 · S — Session bootstrap / profile endpoint
+- [x] **API-2** · P0 · S — Session bootstrap / profile endpoint
   - `POST /api/sessions` → creates (or resumes) a `tutoring_sessions` row (DB-4), returns session id, profile, initial phase (Intro), gap topics, locked problem.
   - Rebuilds profile fresh (KP-2). Returns sidebar data (mastery bars, gap/ok/checking tags, stats scaffold).
   - Conversation history is held in the student-keyed Redis cache, not the session row. On resume, rehydrate history from cache (cache miss → fresh chat against the rebuilt profile, phase from the durable row).
   - On completion: mark the row `completed` and delete the cached transcript.
-- [ ] **API-1** · P0 · M — Tutoring turn endpoint
+- [x] **API-1** · P0 · M — Tutoring turn endpoint
   - `POST /api/sessions/[id]/message` → reply + phase + gap status. Auth-guarded to owning student.
   - Streams tokens if TS-3 streams.
 
 ## Milestone 4 — UI (first usable demo)
 *Exit: a person can complete a problem end-to-end in the browser.*
 
-- [ ] **FE-1** · P0 · S — Split layout shell (chat left, sidebar right; responsive). Wired to API-2.
+- [x] **FE-1** · P0 · S — Split layout shell (chat left, sidebar right; responsive). Wired to API-2.
 - [ ] **FE-2** · P0 · M — Chat panel + phase pills
   - Sends to API-1, renders (streamed) replies; active pill reflects phase; in-flight/optimistic states.
 - [ ] **FE-4** · P0 · S — Locked problem reveal
