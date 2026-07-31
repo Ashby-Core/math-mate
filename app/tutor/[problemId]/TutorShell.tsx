@@ -241,12 +241,18 @@ export default function TutorShell({ problemId }: { problemId: string }) {
           <p className="text-destructive mt-2 text-sm">{turn.message}</p>
         )}
         <div className="mt-2">
-          <Composer
-            value={composerText}
-            onChange={setComposerText}
-            onSend={(text) => handleSend(session.sessionId, text)}
-            disabled={composerDisabled}
-          />
+          {completed ? (
+            <p className="text-muted-foreground text-sm">
+              This problem is complete.
+            </p>
+          ) : (
+            <Composer
+              value={composerText}
+              onChange={setComposerText}
+              onSend={(text) => handleSend(session.sessionId, text)}
+              disabled={composerDisabled}
+            />
+          )}
         </div>
       </section>
 
