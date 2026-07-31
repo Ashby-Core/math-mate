@@ -99,7 +99,9 @@ function renderTurn(turn: TurnContext): string {
       break;
     case "solve":
       line =
-        "All gaps are resolved and the problem is unlocked. Scaffold the student through it step by step — never state the final answer.";
+        turn.totalGaps === 0
+          ? `This problem has no prerequisite gaps to check. If you haven't already, briefly acknowledge that (e.g. "You're solid on the prerequisites here, so let's dive right in") before scaffolding. Scaffold the student through the problem step by step — never state the final answer.`
+          : "All gaps are resolved and the problem is unlocked. Scaffold the student through it step by step — never state the final answer.";
       break;
     case "review":
       line =

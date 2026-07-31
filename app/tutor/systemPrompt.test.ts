@@ -150,4 +150,28 @@ describe("buildSystemPrompt — turn context (TS-3)", () => {
     expect(blocks[2].text).toContain("recap");
     expect(blocks[2].text).toContain("ends the session");
   });
+
+  it("tells the tutor to acknowledge skipping the gap check when a problem has no gaps", () => {
+    const blocks = buildSystemPrompt(profile, makeProblem([FRACTIONS]), {
+      phase: "solve",
+      currentGap: null,
+      resolvedCount: 0,
+      totalGaps: 0,
+    });
+
+    expect(blocks[2].text).toContain("no prerequisite gaps to check");
+    expect(blocks[2].text).toContain("briefly acknowledge that");
+  });
+
+  it("frames the solve turn as normal once gaps were actually resolved", () => {
+    const blocks = buildSystemPrompt(profile, makeProblem([FRACTIONS]), {
+      phase: "solve",
+      currentGap: null,
+      resolvedCount: 1,
+      totalGaps: 1,
+    });
+
+    expect(blocks[2].text).toContain("All gaps are resolved");
+    expect(blocks[2].text).not.toContain("no prerequisite gaps to check");
+  });
 });
