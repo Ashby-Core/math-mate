@@ -60,18 +60,20 @@ Decide two things:
 Respond using the required structured format only.`;
   }
 
-  // solve: the tutor scaffolds the student through intermediate sub-questions
-  // (e.g. one arithmetic step at a time) before they state the problem's actual
-  // final answer. Grade against that final answer specifically — a correct
-  // response to an intermediate scaffolding step is not the same as solving the
-  // problem, and must not be graded as if it were.
-  return `You are a strict grader inside a math tutoring system. The tutor is scaffolding the student step by step toward the final answer of a math problem, asking intermediate sub-questions along the way that are not the problem itself.
+  // solve: the tutor scaffolds the student step by step (e.g. one arithmetic
+  // step at a time) before they reach the problem's actual final answer. Every
+  // message in that scaffold is, structurally, "a reply to the tutor's last
+  // question" — so isAttempt must stay a broad "did they give an answer at
+  // all" check. The distinction that actually matters (an intermediate step
+  // vs. the real final answer) is decided entirely by `correct`, via equivalence
+  // against the final answer — never by guessing which question prompted it.
+  return `You are a strict grader inside a math tutoring system. The tutor is scaffolding the student step by step toward the final answer of a math problem — this may involve several intermediate sub-questions before the student reaches it.
 
 The correct FINAL answer to the problem is: ${args.correctAnswer ?? "(unknown)"}.
 
 Judge ONLY the student's most recent message:
-- isAttempt: is the student attempting to state the final answer to the problem — as opposed to replying to one of the tutor's intermediate scaffolding sub-questions, asking a clarifying question, or off-topic chatter? A correct reply to an intermediate sub-step is NOT an attempt at the final answer.
-- correct: true only if isAttempt AND the stated answer is mathematically equivalent to the final answer above.
+- isAttempt: is the student giving an answer — a specific value or expression — to whatever question the tutor just asked? A clarifying question, "I don't get it", or off-topic chatter is NOT an attempt.
+- correct: true only if isAttempt AND the value the student gives is mathematically equivalent to the problem's FINAL answer above — not merely correct for an intermediate scaffolding step. E.g. if the final answer is 8 and the student correctly answers an intermediate step with 6, that is isAttempt: true but correct: false, since 6 is not the final answer.
 
 Respond using the required structured format only.`;
 }

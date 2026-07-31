@@ -75,10 +75,19 @@ describe("judgeTurn", () => {
 
     const system = systemPromptOf(create);
     expect(system).toContain("FINAL answer to the problem is: 8");
-    expect(system).toContain("intermediate sub-step is NOT an attempt at the final answer");
-    // The prior wording graded against "the question the tutor just asked",
-    // which conflated a correct scaffolding step with solving the problem.
-    expect(system).not.toContain("judge ONLY the student's most recent message against the question the tutor just asked");
+    // `correct` is graded strictly by equivalence to the final answer — not by
+    // guessing whether the message replies to a sub-question or the final one
+    // (that guess is unreliable and previously made the judge never fire true).
+    expect(system).toContain(
+      "correct: true only if isAttempt AND the value the student gives is mathematically equivalent to the problem's FINAL answer above",
+    );
+    expect(system).toContain("isAttempt: true but correct: false");
+    // Regression guard: isAttempt must stay a broad "did they give an answer at
+    // all" check. Framing it as "the final answer, as opposed to a reply to an
+    // intermediate sub-question" made the classifier treat every scaffolded
+    // reply (even the genuinely final one) as a sub-question reply, so it
+    // never fired true and the session could never complete.
+    expect(system).not.toContain("as opposed to replying to one of the tutor's intermediate scaffolding sub-questions");
   });
 
   it("grades the gap_check phase against the named prerequisite topic", async () => {
