@@ -46,20 +46,32 @@ const JUDGE_SCHEMA = {
 } as const;
 
 function judgeSystemPrompt(args: JudgeArgs): string {
-  const target =
-    args.phase === "solve"
-      ? `The student is solving the problem. The correct final answer is: ${args.correctAnswer ?? "(unknown)"}.`
-      : `The student is answering a follow-up question about the prerequisite topic "${
-          args.currentGap?.name ?? "(unknown topic)"
-        }".`;
+  if (args.phase === "gap_check") {
+    return `You are a strict grader inside a math tutoring system. Read the conversation and judge ONLY the student's most recent message against the question the tutor just asked.
 
-  return `You are a strict grader inside a math tutoring system. Read the conversation and judge ONLY the student's most recent message against the question the tutor just asked.
-
-${target}
+The student is answering a follow-up question about the prerequisite topic "${
+      args.currentGap?.name ?? "(unknown topic)"
+    }".
 
 Decide two things:
 - isAttempt: did the student actually try to answer that question? A clarifying question, "I don't get it", or off-topic chatter is NOT an attempt.
 - correct: if it is an attempt, is the answer correct? Judge mathematical equivalence, not exact text — e.g. 7/8, 0.875, and "seven eighths" are all equal.
+
+Respond using the required structured format only.`;
+  }
+
+  // solve: the tutor scaffolds the student through intermediate sub-questions
+  // (e.g. one arithmetic step at a time) before they state the problem's actual
+  // final answer. Grade against that final answer specifically — a correct
+  // response to an intermediate scaffolding step is not the same as solving the
+  // problem, and must not be graded as if it were.
+  return `You are a strict grader inside a math tutoring system. The tutor is scaffolding the student step by step toward the final answer of a math problem, asking intermediate sub-questions along the way that are not the problem itself.
+
+The correct FINAL answer to the problem is: ${args.correctAnswer ?? "(unknown)"}.
+
+Judge ONLY the student's most recent message:
+- isAttempt: is the student attempting to state the final answer to the problem — as opposed to replying to one of the tutor's intermediate scaffolding sub-questions, asking a clarifying question, or off-topic chatter? A correct reply to an intermediate sub-step is NOT an attempt at the final answer.
+- correct: true only if isAttempt AND the stated answer is mathematically equivalent to the final answer above.
 
 Respond using the required structured format only.`;
 }
