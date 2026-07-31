@@ -2,19 +2,22 @@
 
 import React, { useEffect, useState } from "react";
 import type { Phase } from "@/app/tutor/stateMachine";
-import type { SessionResponse } from "@/app/tutor/responseShape";
+import type { DisplayMessage, SessionResponse } from "@/app/tutor/responseShape";
+import { parseFrame, splitLines } from "@/app/tutor/parseStream";
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
 } from "@/app/components/ui/card";
+import Composer from "./Composer";
 
 // The split layout shell: chat on the left, knowledge sidebar on the right,
 // stacking on narrow viewports. It bootstraps the per-problem session from
-// POST /api/sessions and renders the phase-aware chrome. The interactive chat
-// (send/stream), live mastery bars, and the locked-problem reveal are layered in
-// on top of these regions — this file only owns the layout + data wiring.
+// POST /api/sessions, then streams each turn from POST
+// /api/sessions/[id]/message and renders the phase-aware chrome. Mastery bars
+// and the locked-problem reveal are layered in on top of these regions — this
+// file owns the layout, the session bootstrap, and the turn/streaming state.
 
 const PHASES: { key: Phase; label: string }[] = [
   { key: "intro", label: "Intro" },
@@ -23,13 +26,21 @@ const PHASES: { key: Phase; label: string }[] = [
   { key: "review", label: "Review" },
 ];
 
+/** Turn-in-flight state, separate from the outer LoadState/session status. */
+type TurnState =
+  | { kind: "idle" }
+  | { kind: "sending" }
+  | { kind: "streaming"; assistantText: string }
+  | { kind: "error"; message: string };
+
 type LoadState =
   | { status: "loading" }
   | { status: "error"; message: string }
-  | { status: "ready"; data: SessionResponse };
+  | { status: "ready"; session: SessionResponse; turn: TurnState };
 
 export default function TutorShell({ problemId }: { problemId: string }) {
   const [state, setState] = useState<LoadState>({ status: "loading" });
+  const [composerText, setComposerText] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -50,7 +61,11 @@ export default function TutorShell({ problemId }: { problemId: string }) {
           });
           return;
         }
-        setState({ status: "ready", data: body as SessionResponse });
+        setState({
+          status: "ready",
+          session: body as SessionResponse,
+          turn: { kind: "idle" },
+        });
       } catch {
         if (!cancelled) {
           setState({ status: "error", message: "Network error. Try again." });
@@ -64,6 +79,133 @@ export default function TutorShell({ problemId }: { problemId: string }) {
     };
   }, [problemId]);
 
+  async function handleSend(sessionId: string, text: string) {
+    const userMessage: DisplayMessage = { role: "user", content: text };
+
+    setComposerText("");
+    setState((s) =>
+      s.status !== "ready"
+        ? s
+        : {
+            ...s,
+            session: {
+              ...s.session,
+              messages: [...s.session.messages, userMessage],
+            },
+            turn: { kind: "sending" },
+          },
+    );
+
+    const fail = (message: string) => {
+      setComposerText(text);
+      setState((s) => {
+        if (s.status !== "ready") return s;
+        // Drop the optimistic user bubble — nothing was accepted, so the
+        // failed message shouldn't linger in the transcript.
+        const messages = s.session.messages.filter((m) => m !== userMessage);
+        return {
+          ...s,
+          session: { ...s.session, messages },
+          turn: { kind: "error", message },
+        };
+      });
+    };
+
+    try {
+      const res = await fetch(`/api/sessions/${sessionId}/message`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: text }),
+      });
+
+      if (!res.ok || !res.body) {
+        const body = await res.json().catch(() => null);
+        fail(body?.error ?? "Could not send that message.");
+        return;
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const { lines, remainder } = splitLines(
+          buffer,
+          decoder.decode(value, { stream: true }),
+        );
+        buffer = remainder;
+
+        for (const raw of lines) {
+          let frame;
+          try {
+            frame = parseFrame(raw);
+          } catch {
+            fail("Received a malformed reply. Try again.");
+            return;
+          }
+
+          if (frame.type === "meta") {
+            const { phase, status, unlocked, problem, gaps, sidebar } = frame;
+            setState((s) =>
+              s.status !== "ready"
+                ? s
+                : {
+                    ...s,
+                    session: {
+                      ...s.session,
+                      phase,
+                      status,
+                      unlocked,
+                      problem,
+                      gaps,
+                      sidebar,
+                    },
+                    turn: { kind: "streaming", assistantText: "" },
+                  },
+            );
+          } else if (frame.type === "token") {
+            setState((s) =>
+              s.status !== "ready" || s.turn.kind !== "streaming"
+                ? s
+                : {
+                    ...s,
+                    turn: {
+                      kind: "streaming",
+                      assistantText: s.turn.assistantText + frame.text,
+                    },
+                  },
+            );
+          } else if (frame.type === "done") {
+            setState((s) => {
+              if (s.status !== "ready") return s;
+              const assistantText =
+                s.turn.kind === "streaming" ? s.turn.assistantText : "";
+              return {
+                ...s,
+                session: {
+                  ...s.session,
+                  messages: [
+                    ...s.session.messages,
+                    { role: "assistant", content: assistantText },
+                  ],
+                },
+                turn: { kind: "idle" },
+              };
+            });
+          } else if (frame.type === "error") {
+            fail(frame.message);
+            return;
+          }
+        }
+      }
+    } catch {
+      fail("Network error. Try again.");
+    }
+  }
+
   if (state.status === "loading") {
     return <CenteredNote>Starting your session…</CenteredNote>;
   }
@@ -71,35 +213,41 @@ export default function TutorShell({ problemId }: { problemId: string }) {
     return <CenteredNote tone="error">{state.message}</CenteredNote>;
   }
 
-  const session = state.data;
+  const { session, turn } = state;
+  const completed = session.status === "completed";
+  const composerDisabled =
+    turn.kind === "sending" || turn.kind === "streaming" || completed;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 p-4 lg:flex-row lg:overflow-hidden">
       {/* Chat column — the primary work surface. */}
       <section className="flex min-h-0 flex-1 flex-col">
         <SessionHeader session={session} />
-        {/* Transcript + composer are filled in by the chat panel work; the shell
-            just provides the scroll container and the seed messages. */}
         <Card className="mt-4 flex min-h-0 flex-1 flex-col">
           <CardContent className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
-            {session.messages.length === 0 ? (
+            {session.messages.length === 0 && turn.kind !== "streaming" ? (
               <p className="text-muted-foreground">No messages yet.</p>
             ) : (
-              session.messages.map((m, i) => (
-                <div
-                  key={i}
-                  className={
-                    m.role === "user"
-                      ? "self-end rounded-lg bg-primary/10 px-3 py-2"
-                      : "self-start rounded-lg bg-muted px-3 py-2"
-                  }
-                >
-                  {m.content}
-                </div>
-              ))
+              session.messages.map((m, i) => <MessageBubble key={i} message={m} />)
+            )}
+            {turn.kind === "streaming" && (
+              <MessageBubble
+                message={{ role: "assistant", content: turn.assistantText }}
+              />
             )}
           </CardContent>
         </Card>
+        {turn.kind === "error" && (
+          <p className="text-destructive mt-2 text-sm">{turn.message}</p>
+        )}
+        <div className="mt-2">
+          <Composer
+            value={composerText}
+            onChange={setComposerText}
+            onSend={(text) => handleSend(session.sessionId, text)}
+            disabled={composerDisabled}
+          />
+        </div>
       </section>
 
       {/* Sidebar column — knowledge state + current problem. Placeholder content;
@@ -149,6 +297,20 @@ export default function TutorShell({ problemId }: { problemId: string }) {
           </CardContent>
         </Card>
       </aside>
+    </div>
+  );
+}
+
+function MessageBubble({ message }: { message: DisplayMessage }) {
+  return (
+    <div
+      className={
+        message.role === "user"
+          ? "self-end rounded-lg bg-primary/10 px-3 py-2"
+          : "self-start rounded-lg bg-muted px-3 py-2"
+      }
+    >
+      {message.content}
     </div>
   );
 }
