@@ -89,7 +89,7 @@ inference) · shadcn/ui + Radix + Tailwind 4 + Recharts.
 *Exit: a person can complete a problem end-to-end in the browser.*
 
 - [x] **FE-1** · P0 · S — Split layout shell (chat left, sidebar right; responsive). Wired to API-2.
-- [ ] **FE-2** · P0 · M — Chat panel + phase pills
+- [x] **FE-2** · P0 · M — Chat panel + phase pills
   - Sends to API-1, renders (streamed) replies; active pill reflects phase; in-flight/optimistic states.
 - [ ] **FE-4** · P0 · S — Locked problem reveal
   - Hidden during Intro + Gap check; auto-reveals on Solve. Lock derives from server phase only.
