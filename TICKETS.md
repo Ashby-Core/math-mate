@@ -275,6 +275,69 @@ rediscover the architecture from scratch.
   - Ordering guarantee: the write must land before the *next* profile rebuild that could read it — since `buildProfile` is called fresh at the top of every turn and every bootstrap (KP-2), and `after()` runs before the response is fully flushed to the client, this should hold naturally, but verify it explicitly (e.g. an integration-style test that runs a turn, awaits the deferred write, then rebuilds the profile and asserts the weakness appears) rather than assuming it.
   - Update `conversation.test.ts` to assert the non-blocking contract (the returned stream must be obtainable without waiting on the misconception promise) in addition to the existing wrong-answer-fires-MI assertion.
 
+## Milestone 6 — Redis-backed history cache
+*Exit: conversation history survives serverless cold starts and multi-instance deploys
+with zero caller changes. Not a live-flow blocker — the in-memory cache already works
+correctly for a single dev/demo instance; this milestone is about production correctness.*
+
+Today `lib/historyCache.ts` only has `InMemoryHistoryCache`, a process-local `Map`. Its own
+comment already flags the problem: "a cache miss is expected in multi-instance/serverless
+deploys" — but in a real Vercel/serverless deployment that's not an edge case, it's the
+common case, since each request can land on a cold or different instance with an empty
+Map. The `HistoryCache` interface was deliberately designed so this swap needs zero
+changes in `app/api/sessions/route.ts` or `app/api/sessions/[id]/message/route.ts` — both
+already depend only on the interface, never the concrete class.
+
+**Provider decision:** Upstash Redis — REST-based (`@upstash/redis`), so it needs no
+persistent TCP connection/pool, which fits Next.js route handlers running on serverless
+(`runtime = "nodejs"`, `dynamic = "force-dynamic"`) far more cleanly than a TCP client like
+`ioredis`. This also matches the "~30 MB free tier" framing already in this file's stack
+line above — that number is Upstash's free-tier ceiling.
+
+- [ ] **CACHE-1** · P0 · XS — Provision Upstash Redis + env plumbing
+  **Overview:** Stands up the actual instance and credentials the rest of this milestone
+  talks to. Deliberately no application code changes — just makes Redis reachable from
+  both local dev and the deployed app.
+  **Acceptance criteria:**
+  - Upstash Redis database created, sized for the ~30 MB free-tier budget this repo already assumes.
+  - `@upstash/redis` added to `package.json` dependencies.
+  - `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` added locally to `.env.local` (gitignored, never committed) — if the repo has no `.env.example`, add one listing the required var *names* (no values) alongside the existing `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `ANTHROPIC_API_KEY`.
+  - Same two vars added to the production deploy target's environment config (e.g. Vercel project settings) — this is a manual dashboard step, call it out as such rather than assuming it's scriptable.
+  - A manual `GET`/`SET` round trip against the instance confirms connectivity before CACHE-2 builds on it.
+
+- [ ] **CACHE-2** · P0 · M — `RedisHistoryCache` implementation
+  **Overview:** Implements the existing `HistoryCache` interface (`lib/historyCache.ts:12`) against Upstash so it's a drop-in replacement for `InMemoryHistoryCache` — same method signatures, same semantics, just backed by a network store instead of a `Map`.
+  **Acceptance criteria:**
+  - New `RedisHistoryCache implements HistoryCache`, colocated in `lib/historyCache.ts` (or split into `lib/historyCache.redis.ts` if the file gets unwieldy) alongside the existing in-memory class.
+  - Key scheme: `history:{sessionId}`, namespaced so this Redis instance can later hold other cached data without key collisions. Note: `sessionId` already uniquely identifies a (student, problem) pair per the migration-0003 unique-active-session index, so this is already effectively student-scoped despite this file's stack line calling it a "student-keyed cache" — no separate student-id component needed in the key.
+  - `get(sessionId)`: fetch + JSON-parse the value; `null` on a miss (Upstash returns `null`/`undefined` for a missing key) — matches the interface's documented miss contract.
+  - `set(sessionId, messages)`: write JSON with the TTL (re)armed on every write (`EX`/`PX`), mirroring `InMemoryHistoryCache.set`'s behavior of resetting `expiresAt` on every call, not just on creation.
+  - `append(sessionId, ...messages)`: a get-then-set is not atomic under concurrent writes to the same key — document (don't silently assume) that this is acceptable because API-1 only ever has one in-flight turn per session (auth + `status === "active"` checks serialize turns per session in practice), the same kind of documented assumption API-2 already makes about its one known concurrency race (handled there via a DB unique index, not locking). If a real concurrent-append race is ever found, revisit with a Redis list type (`RPUSH`/`LRANGE`) instead of a JSON blob.
+  - `delete(sessionId)`: removes the key outright — don't rely on TTL alone for the explicit-delete-on-completion path.
+  - Default TTL matches the in-memory default (`30 * 60 * 1000` ms), passed as a constructor param so tests can use a short TTL like the existing `historyCache.test.ts` does for `InMemoryHistoryCache`.
+  - Redis client errors (network blip, rate limit) are caught, logged, and treated as a miss on read / silently dropped on write — same log-and-swallow contract as every query function in `app/queries/`. A transient Redis outage must degrade a session to "fresh chat against the rebuilt profile" (the existing documented miss behavior), never a 500.
+
+- [ ] **CACHE-3** · P0 · S — Swap the production singleton, keep tests offline
+  **Overview:** Flips the exported `historyCache` singleton over to Redis in real environments while keeping `InMemoryHistoryCache` available for Vitest (no jsdom, no network in CI) and for local dev when Upstash credentials aren't configured.
+  **Acceptance criteria:**
+  - `lib/historyCache.ts`'s exported `historyCache` singleton uses `RedisHistoryCache` when `UPSTASH_REDIS_REST_URL`/`UPSTASH_REDIS_REST_TOKEN` are set, and falls back to `InMemoryHistoryCache` otherwise — log a one-time warning on fallback so it's obvious in dev logs that history won't survive a restart.
+  - Zero changes to `app/api/sessions/route.ts` or `app/api/sessions/[id]/message/route.ts` — if closing this ticket requires editing either route, the interface boundary has broken; fix that instead of the routes.
+  - `npm test` still passes with no live Upstash credentials present — existing tests keep exercising `InMemoryHistoryCache` directly by name; any Redis-hitting tests (CACHE-4) are skip-gated on env presence, not run by default.
+
+- [ ] **CACHE-4** · P1 · S — Test coverage for the Redis implementation
+  **Overview:** Mirrors the existing `historyCache.test.ts` contract suite against `RedisHistoryCache` so both implementations are verified against the same behavior (miss → `null`, round-trip, append semantics, delete, TTL expiry) and can't silently drift apart.
+  **Acceptance criteria:**
+  - A hand-rolled fake Upstash client (covering only the methods `RedisHistoryCache` actually calls) lets the same contract tests from `historyCache.test.ts` run against `RedisHistoryCache` with no network call, in CI.
+  - TTL-expiry coverage either drives the fake client's clock directly, or is written as a live-only test explicitly gated with `describe.skipIf(!process.env.UPSTASH_REDIS_REST_URL)` so it never runs without real (disposable/test) credentials.
+  - Optional: one live smoke test behind the same `skipIf` gate that round-trips against the real Upstash instance — a manual "does this actually work" check, not a CI requirement.
+
+- [ ] **CACHE-5** · P2 · XS — Operational cleanup
+  **Overview:** Small follow-ups once Redis is live in production: keep the docs honest about which implementation is used when, and sanity-check the memory-budget assumption this file has been carrying since before Redis existed.
+  **Acceptance criteria:**
+  - Update the comment block atop `lib/historyCache.ts` (currently phrases the Redis swap as a future event) to describe both implementations as they now exist and when each is selected, rather than describing a completed migration as still-upcoming.
+  - Sanity-check the "~75 KB per session" estimate in this file's stack line against a real multi-turn transcript's JSON size, and correct the concurrent-session budget note if it's meaningfully off.
+  - Confirm `historyCache.delete` on session completion (already called from `app/api/sessions/[id]/message/route.ts`) frees the Upstash key immediately rather than relying on the TTL to eventually reclaim it — true by construction for the in-memory `Map.delete`; verify it's still true for the Redis `DEL` call.
+
 ---
 
 ## Why this order
@@ -292,3 +355,7 @@ FE-1/FE-2 are shipped; **FE-4 is nearly done** (verify + polish, see above) and 
 needs a rendering pass over data that's already being sent to the client**. Milestone 5
 (MI-1/MI-2/MI-3) is unstarted but explicitly deferrable — the live tutoring flow already
 calls a stubbed no-op in its place, so shipping without it does not block a usable demo.
+Milestone 6 (Redis) is also deferrable for a demo — the in-memory cache works fine for a
+single running instance — but matters before any real multi-instance/serverless
+deployment, since a cache miss today is silent and just means a resumed session loses its
+transcript (not a crash, but a degraded experience worth fixing before calling this done).
