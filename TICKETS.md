@@ -194,7 +194,7 @@ rediscover the architecture from scratch.
     same as the existing active-resume path.
   - The returned `phase`/`status` reflect the completed session (`review`,
     `completed`) so `TutorShell` renders its existing `completed` branch
-    (`TutorShell.tsx:217-219`) immediately, with the problem unlocked per FE-4's
+    (`TutorShell.tsx:267-270`) immediately, with the problem unlocked per FE-4's
     firewall.
   - Transcript: since `historyCache` deletes the transcript on completion by design
     (Milestone 6 exit criteria), decide and document whether a completed resume
@@ -203,6 +203,8 @@ rediscover the architecture from scratch.
     "no message a server never accepted" guarantee while doing so.
   - A student can complete a problem, navigate away, and come back to see it marked
     complete rather than being dropped back into a fresh Intro turn.
+
+## Milestone 4 — UI (first usable demo)
 *Exit: a person can complete a problem end-to-end in the browser.*
 
 - [x] **FE-1** · P0 · S — Split layout shell (`app/tutor/[problemId]/TutorShell.tsx`, `page.tsx`)
