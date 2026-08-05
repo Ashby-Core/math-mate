@@ -175,6 +175,35 @@ rediscover the architecture from scratch.
   - `updateSessionState` (durable row) is written *before* the stream opens; the transcript (`historyCache.append`, or `.delete` on completion) is written only after the full reply text is collected, since it needs the complete assistant turn.
   - A failure after the 200 status is already sent (mid-stream) can only surface as an `{type:"error"}` frame — documented as a client contract in `TutorShell.tsx`'s stream reader, which must check for it.
 
+- [ ] **API-3** · P1 · S — Resume a completed session for review
+  **Overview:** Found while manually verifying FE-4: revisiting a problem after its
+  session has completed silently starts a brand-new session instead of showing the
+  finished one. `getActiveSession` (`app/queries/sessions.ts:33-61`) filters
+  `status='active'`, so once a session completes there is no "active" row for
+  `POST /api/sessions` to resume — it falls straight into the fresh-session branch,
+  regenerating an Intro greeting and resetting phase to `intro` for a problem the
+  student already solved. `getSessionStatusesByAssignment`
+  (`app/queries/sessions.ts:144-169`) already ranks `completed` above `active`/
+  `abandoned` for the assignment page's CTA (implying a "Review" affordance is
+  intended), but nothing in API-2 actually serves that completed row back to
+  `TutorShell`.
+  **Acceptance criteria:**
+  - `POST /api/sessions` checks for a `completed` session for the (student, problem)
+    pair (in addition to `getActiveSession`'s `active` lookup) and, if found, returns
+    it via `toSessionResponse` instead of creating a new row — no new Claude call,
+    same as the existing active-resume path.
+  - The returned `phase`/`status` reflect the completed session (`review`,
+    `completed`) so `TutorShell` renders its existing `completed` branch
+    (`TutorShell.tsx:267-270`) immediately, with the problem unlocked per FE-4's
+    firewall.
+  - Transcript: since `historyCache` deletes the transcript on completion by design
+    (Milestone 6 exit criteria), decide and document whether a completed resume
+    shows an empty transcript with just the final state, or whether this ticket
+    needs to persist a minimal completion summary — don't silently regress FE-2's
+    "no message a server never accepted" guarantee while doing so.
+  - A student can complete a problem, navigate away, and come back to see it marked
+    complete rather than being dropped back into a fresh Intro turn.
+
 ## Milestone 4 — UI (first usable demo)
 *Exit: a person can complete a problem end-to-end in the browser.*
 
@@ -199,7 +228,7 @@ rediscover the architecture from scratch.
   - `parseStream.ts` (`splitLines`/`parseFrame`) buffers partial NDJSON lines across `TextDecoder` chunks — a frame split across two network reads must still parse correctly (covered in `parseStream.test.ts`).
   - `SessionHeader`'s phase pills highlight `session.phase`, sourced from the server's `meta` frame — never inferred client-side.
 
-- [ ] **FE-4** · P0 · S — Locked problem reveal
+- [x] **FE-4** · P0 · S — Locked problem reveal
   **Overview:** Most of this ticket's substance already landed as a side effect of
   `responseShape.ts` (the `unlocked`/`questionContent` firewall, API-2/API-1) and
   `TutorShell.tsx`'s rendering of `session.problem`: the question text is `null` until
@@ -350,9 +379,11 @@ line above — that number is Upstash's free-tier ceiling.
 
 ## What's actually left for the MVP
 
-Milestones 1–3 are fully shipped (data layer, tutor brain, HTTP). Of Milestone 4,
-FE-1/FE-2 are shipped; **FE-4 is nearly done** (verify + polish, see above) and **FE-3
-needs a rendering pass over data that's already being sent to the client**. Milestone 5
+Milestones 1–2 are fully shipped (data layer, tutor brain). Milestone 3 (HTTP) is shipped
+apart from **API-3** (resume-a-completed-session gap found while verifying FE-4 — not a
+live-flow blocker, since a fresh problem still plays through fine, just doesn't resume
+correctly once already completed). Of Milestone 4, **FE-1/FE-2/FE-4 are shipped** and
+**FE-3 needs a rendering pass over data that's already being sent to the client**. Milestone 5
 (MI-1/MI-2/MI-3) is unstarted but explicitly deferrable — the live tutoring flow already
 calls a stubbed no-op in its place, so shipping without it does not block a usable demo.
 Milestone 6 (Redis) is also deferrable for a demo — the in-memory cache works fine for a

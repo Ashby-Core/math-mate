@@ -208,4 +208,29 @@ describe("POST /api/sessions — resume", () => {
     expect(json.messages).toEqual([]);
     expect(m.openSession).not.toHaveBeenCalled();
   });
+
+  it.each(["solve", "review"] as const)(
+    "resuming mid-%s returns the problem already unlocked, with no extra turn",
+    async (phase) => {
+      m.getActiveSession.mockResolvedValue({
+        id: "sess-unlocked",
+        phase,
+        status: "active",
+        gapState: {
+          gaps: [{ topicId: FRACTIONS, name: "Adding Fractions", resolved: true }],
+        },
+      });
+      m.cacheGet.mockResolvedValue(null);
+
+      const res = await POST(makeReq({ problemId: "p1" }));
+      expect(res.status).toBe(200);
+      const json = await res.json();
+
+      expect(json.phase).toBe(phase);
+      expect(json.problem.unlocked).toBe(true);
+      expect(json.problem.questionContent).toBe(problem.questionContent);
+      expect(m.openSession).not.toHaveBeenCalled();
+      expect(m.createSession).not.toHaveBeenCalled();
+    },
+  );
 });
