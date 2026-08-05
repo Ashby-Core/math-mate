@@ -13,6 +13,13 @@ inference) · shadcn/ui + Radix + Tailwind 4 + Recharts.
 
 **Labels:** Priority P0 (high) / P1 (med) / P2 (low) · Size XS / S / M / L / XL.
 
+Each ticket below has an **Overview** (why it exists, what it plugs into) and
+**Acceptance criteria** (what "done" means). For shipped tickets these describe what was
+actually built, with real file/function references, so a fresh session can verify state
+instead of re-deriving it. For open tickets they're a concrete spec to implement against —
+file paths and existing types are named directly so the next session doesn't have to
+rediscover the architecture from scratch.
+
 ---
 
 ## ⚠️ Decisions to resolve before their milestone
@@ -31,86 +38,242 @@ inference) · shadcn/ui + Radix + Tailwind 4 + Recharts.
 ## Milestone 1 — Data foundation
 *Exit: produce the exact profile JSON for a real student.*
 
-- [x] **DB-2** · P0 · XS — Weakness dedup support columns / defaults — verified already satisfied (observed_count def 1, last_observed def now(), description varchar(100))
-  - `observed_count` default 1; `created_at`/`last_observed` default `now()`.
-  - Update path: `observed_count = observed_count + 1, last_observed = now()` by id.
-  - Verify `description` varchar(100) cap; inference output must be validated/truncated to fit.
-  - Note: semantic dedup lives in MI-2, not a DB constraint.
+- [x] **DB-2** · P0 · XS — Weakness dedup support columns / defaults
+  **Overview:** The misconception pipeline (Milestone 5) needs to tell a *recurring*
+  misconception from a brand-new one without re-deriving bookkeeping columns by hand.
+  `observed_count` / `last_observed` exist so `incrementWeakness` (see DB-3) can bump a
+  counter instead of inserting a duplicate row, and the `description` cap keeps the column
+  bounded regardless of what a model generates.
+  **Acceptance criteria:**
+  - `student_topic_weaknesses.observed_count` defaults to `1` on insert — verified.
+  - `created_at` and `last_observed` default to `now()` — verified.
+  - `description` is `varchar(100)`; `insertWeakness` (`app/queries/weaknesses.ts`) truncates to this cap before insert so a longer model output can never violate the column — verified.
+  - No DB-level uniqueness on `(student_id, topic_id, description)` — semantic dedup is intentionally an application-layer concern (**MI-2**), not a constraint.
+
 - [x] **DB-3** · P0 · S — Typed query functions (`app/queries/`) — `masteries.ts` + `weaknesses.ts`
-  - `getMasteries(studentId, courseId)`, `getWeaknesses(studentId, courseId)`.
-  - **Mastery is derived, not stored:** compute `mastery = attempted > 0 ? correct / attempted : null` (0–1 float) in this layer (single source of truth for all consumers — page, profile builder, gap logic). Return the raw `problems_attempted` / `problems_correct` alongside the derived mastery.
-  - `insertWeakness(...)`, `incrementWeakness(id)`, and an update path for `problems_attempted` / `problems_correct` on completion.
-  - All return typed results; use the server Supabase client (`@supabase/ssr`).
-- [x] **DB-1** · P1 · XS — Indexes for profile-assembly joins (migration 0001; also added owner-scoped UPDATE RLS to unblock writes)
-  - Composite `student_topic_masteries (student_id, course_id)`.
-  - `student_topic_weaknesses (student_id, topic_id)`; `topics (slug)`.
-- [x] **KP-1** · P0 · M — Profile assembly query (`app/queries/profile.ts` → `assembleProfile`)
-  - Returns `{ courseName, student:{id,name}, topicMasteryScores:{slug:float}, weaknesses:{slug:[string]} }`.
-  - `topicMasteryScores` uses the derived `0–1` mastery from DB-3 (computed from `problems_correct` / `problems_attempted`); unassessed topics (`attempted = 0` or no row) are `null`.
-  - Multiple weaknesses per topic group into an array.
-  - Unit-tested against a seeded student fixture (include an unattempted-topic case).
-- [x] **KP-2** · P0 · S — Profile builder service + rebuild hook (`app/queries/profile.ts` → `buildProfile`)
-  - `buildProfile(studentId, courseId)` returns validated profile.
-  - Rebuilt from DB at the start of each new problem (not cached across problems).
-  - Stable shape when masteries/weaknesses are empty. No Claude calls here.
-- [x] **DB-4** · P0 · XS — `tutoring_sessions` table (durable session state) (migration 0002, owner-scoped RLS)
-  - Columns: `id`, `student_id`, `problem_id`, `phase`, gap-resolution state, `status` (active/completed/abandoned), `created_at`, `updated_at`. One row per problem-session.
-  - Holds only small structured state needed to resume — **not** the conversation transcript (that lives in the Redis cache; see session-persistence decision).
-  - Reversible migration. Index on `(student_id, status)` for resume lookups.
+  **Overview:** The single place mastery is computed. Every downstream consumer — the gap
+  classifier (`gaps.ts`), the profile builder (KP-1/KP-2), the sidebar (FE-3) — reads
+  mastery through this layer so there is exactly one definition of "gap" in the system.
+  Also owns the weakness CRUD the misconception pipeline will drive.
+  **Acceptance criteria:**
+  - `getMasteries(supabase, studentId, courseId)` returns one `TopicMastery` per course topic (LEFT-joined so unattempted topics still appear), with `mastery = attempted > 0 ? correct / attempted : null` (`app/queries/masteries.ts:24`).
+  - `updateMasteryCounts(supabase, studentId, topicId, wasCorrect)` upserts on `(student_id, topic_id)`, incrementing `problems_attempted` (and `problems_correct` when correct) — used by `conversation.ts` on session completion.
+  - `getWeaknesses`, `insertWeakness`, `incrementWeakness` in `weaknesses.ts` — typed, truncate/normalize as described in DB-2.
+  - Every function logs the Supabase error and returns `null`/`[]` on failure rather than throwing — callers branch on the return value.
+  - Colocated `*.test.ts` per file (`masteries.test.ts`, `weaknesses.test.ts`) covering the derivation edge case (`attempted = 0` → `null`) and the error path.
+
+- [x] **DB-1** · P1 · XS — Indexes + RLS for profile-assembly joins (migration `0001_profile_indexes_and_rls.sql`)
+  **Overview:** KP-1's profile query joins masteries and weaknesses per student per
+  course on every problem load; this migration makes that join cheap and closes a write
+  hole where the initial schema had no owner-scoped UPDATE policy (mastery/weakness
+  updates were silently rejected before this landed).
+  **Acceptance criteria:**
+  - `idx_weaknesses_student_topic` on `student_topic_weaknesses (student_id, topic_id)` exists. (No separate index was needed for masteries — `(student_id, topic_id)` is already covered by the pre-existing `unique_student_topic` constraint.)
+  - Owner-scoped `UPDATE` RLS policies exist on both `student_topic_masteries` and `student_topic_weaknesses` (`student_id = auth.uid()`), unblocking `updateMasteryCounts` / `incrementWeakness`.
+  - `INSERT` policies are owner-scoped (`with check (student_id = auth.uid())`) rather than open — a student can only write rows attributed to themselves.
+  - Migration is reversible (guarded with `if not exists` / `drop policy if exists`, safe to re-run).
+
+- [x] **KP-1** · P0 · M — Profile assembly query (`app/queries/profile.ts` → `buildProfile`)
+  **Overview:** Turns raw mastery/weakness rows into the exact shape the tutoring system
+  prompt (TS-1) and the client sidebar (FE-3) both consume — keyed by topic id, human
+  names attached, so nothing downstream re-joins topics itself.
+  **Acceptance criteria:**
+  - Returns `StudentProfile = { courseName, student: {id, name}, topicMasteryScores: Record<topicId, {name, mastery}>, weaknesses: Record<topicId, {name, items: string[]}> }` (`app/types.ts:70`).
+  - `topicMasteryScores` includes every course topic (via `getMasteries`'s LEFT join); unassessed topics carry `mastery: null`, never a fabricated `0`.
+  - Multiple weaknesses for the same topic collapse into one entry with `items` as an array of descriptions.
+  - Shape stays stable (empty objects, not `undefined`) when the student has no masteries/weaknesses rows — verified in `profile.test.ts` including an unattempted-topic fixture.
+
+- [x] **KP-2** · P0 · S — Profile builder service + rebuild hook (same file, `buildProfile`)
+  **Overview:** Formally, KP-1 and KP-2 collapsed into one function (`buildProfile`) once
+  the composition turned out to be a thin `Promise.all` over the DB-3 queries — there was
+  no separate caching/service layer worth splitting out. The important behavioral
+  guarantee this ticket protects is *freshness*: the profile must never be cached across
+  problems, or a misconception written mid-session (Milestone 5) would be invisible to the
+  very next prompt build.
+  **Acceptance criteria:**
+  - `buildProfile(supabase, studentId, courseId)` is called fresh at session bootstrap (`POST /api/sessions`) and again on every turn (`POST /api/sessions/[id]/message`) — never memoized across requests.
+  - Makes no Anthropic/Claude calls — pure data composition.
+  - Verified this is idempotent and side-effect-free via `profile.test.ts`.
+
+- [x] **DB-4** · P0 · XS — `tutoring_sessions` table (migration `0002_tutoring_sessions.sql`)
+  **Overview:** The durable half of the two-store session-persistence design (see the
+  Decisions section): small enough state (phase, gap progress, status) to survive a
+  server restart or a Redis eviction without losing the student's place, while the bulky
+  conversation transcript stays in the ephemeral cache (DB-4 is not the transcript store).
+  **Acceptance criteria:**
+  - Columns: `id`, `student_id` (FK → `profiles`), `problem_id` (FK → `problems`), `phase` (`check` constrained to `intro|gap_check|solve|review`), `gap_state jsonb`, `status` (`check` constrained to `active|completed|abandoned`), `created_at`, `updated_at`.
+  - `idx_sessions_student_status` on `(student_id, status)` for resume lookups.
+  - RLS enabled with owner-scoped `select`/`insert`/`update`/`delete` policies (`student_id = auth.uid()`).
+  - Maps to/from in-memory `TutoringState` via `toPersisted`/`fromPersisted` in `app/tutor/stateMachine.ts:160`.
+  - Migration is additive/reversible (`create table if not exists`, `create index if not exists`).
 
 ## Milestone 2 — Tutoring brain
 *Exit: Intro → Gap check → Solve → Review runs correctly given an input message (no UI).*
 
-- [x] **TS-1** · P0 · M — System prompt builder
-  - Merges profile (KP-2) + current problem; encodes probe-gaps-first, one mini-lesson per gap, scaffold not answer.
-  - Snapshot-tested. Model `claude-sonnet-4-6`; consider prompt caching for the static block.
-- [x] **TS-2** · P0 · L — Phase state machine *(resolve threshold + prerequisite-mapping decisions first)*
-  - Gap topics = prerequisites with mastery below threshold. `null` (unassessed) is **not** a gap — don't probe it.
-  - Gap check: one mini-lesson + one follow-up per gap; one correct answer resolves it.
-  - Problem gated until all gaps resolved; transitions deterministic and serializable.
-- [x] **TS-3** · P0 · L — Conversation handler *(stub the MI trigger as a no-op for now)*
-  - Takes message + state → Sonnet reply + updated phase.
-  - Detects correct/incorrect follow-up answers; on wrong answer fires MI pipeline (stubbed).
-  - On completion: mastery update + summary.
+- [x] **TS-1** · P0 · M — System prompt builder (`app/tutor/systemPrompt.ts`)
+  **Overview:** Encodes the tutoring pedagogy itself — probe gaps before the problem,
+  one mini-lesson + one question per gap, scaffold rather than answer — as a prompt, so
+  the state machine (TS-2) only has to decide *when* to move phases while the model
+  decides *how* to teach within a phase. Splits static policy from per-turn content so the
+  stable prefix can be prompt-cached (cheaper, faster repeated turns).
+  **Acceptance criteria:**
+  - `buildSystemPrompt(profile, problem, turn?)` returns three `Anthropic.TextBlockParam`s: `[0]` a byte-identical `STATIC_RULES` block marked `cache_control: { type: "ephemeral" }`, `[1]` per-session context (course, student, problem text gated by a "do not reveal" instruction, prerequisite topic list with GAP/OK/UNASSESSED status and known misconceptions), `[2]` the per-turn instruction (only when `turn` is supplied).
+  - `STATIC_RULES` contains zero per-student/per-problem content — verified by snapshot test (`systemPrompt.test.ts`); any change to it is a deliberate, reviewed diff since it invalidates the cache prefix for every session.
+  - Pure and deterministic — no Claude calls, same inputs always produce the same blocks.
+  - Model reference lives in `constants.ts` (`TUTOR_MODEL = "claude-sonnet-4-6"`), not inlined here.
+
+- [x] **TS-2** · P0 · L — Phase state machine (`app/tutor/stateMachine.ts` + `app/tutor/gaps.ts`)
+  **Overview:** The deterministic backbone the rest of the tutor brain hangs off of. It
+  is pure and serializable on purpose: no Claude call decides a phase transition, only a
+  judged `TutoringEvent` does, which is what makes phase state resumable from a Postgres
+  row after a server restart and testable without mocking an LLM.
+  **Acceptance criteria:**
+  - `Phase = "intro" | "gap_check" | "solve" | "review"`; `advance(state, event)` is a pure reducer — never mutates, returns the same reference (`canApply`) when an event doesn't apply to the current phase.
+  - Gaps are exactly a problem's tagged prerequisite topics (`problem.tops`, resolved via `gaps.ts::resolvePrerequisites`) classified `GAP` when mastery is non-null and below `GAP_THRESHOLD` (`0.6`); `null` (unassessed) is never a gap — `classifyTopic` (`gaps.ts:15`).
+  - `gap_check`: one gap probed at a time (`currentGap` = first unresolved, in `problem.tops` order); one correct `GAP_ATTEMPT` resolves it; phase advances to `solve` once all gaps are resolved, straight to `solve` from `intro` if there were none.
+  - `solve` → `review` only on a correct `SOLVE_ATTEMPT`; `review` → `completed` only via an explicit `ADVANCE` (`isComplete`/`status` transitions are one-way — a completed session's state never changes again).
+  - `toPersisted`/`fromPersisted` round-trip `{phase, status, gapState: {gaps}}` against the `tutoring_sessions` row shape from DB-4, normalizing a missing/empty `gap_state`.
+  - Full transition table covered in `stateMachine.test.ts` (every phase × every applicable/inapplicable event).
+
+- [x] **TS-3** · P0 · L — Conversation handler (`app/tutor/conversation.ts`)
+  **Overview:** The glue that turns one HTTP request into judge → state transition →
+  side effects → a Sonnet reply, with a hard invariant: **all state and side effects
+  resolve before the reply stream is consumed**, so the client's `meta` frame (API-1) is
+  never guessing about a phase that might still change mid-stream.
+  **Acceptance criteria:**
+  - `handleTurn(deps, {profile, problem, state, history, studentMessage})`: in `gap_check`/`solve`, calls `judgeTurn` (Haiku, `judge.ts`) *before* advancing state; `intro`/`review` advance unconditionally (no judging needed) — `conversation.ts:126`.
+  - A judge parse failure (`isAttempt: false`) never advances the phase or fires side effects — matches the judge's own documented failure mode.
+  - On a wrong `GAP_ATTEMPT`/`SOLVE_ATTEMPT`, calls the injected `inferMisconception` (currently the Milestone-5 no-op stub) — this is the exact call MI-3 will change to fire asynchronously instead of being awaited inline as it is today.
+  - On the turn that flips `isComplete(newState)` from `false`→`true`, calls `updateMasteryCounts` once per distinct topic in `problem.tops`, always with `wasCorrect: true` (only a correct final answer reaches `review`→`completed`).
+  - All dependencies (`Anthropic`, `SupabaseClient`, `inferMisconception`) are injected via `ConversationDeps` so the handler is unit-testable with fakes — no real network/DB calls in `conversation.test.ts`.
+  - Returns the reply as an unconsumed `Anthropic.MessageStream` (`.stream`) — the caller (API-1) is responsible for forwarding it; `handleTurn` itself never awaits it to completion.
 
 ## Milestone 3 — Wire it to HTTP
 *Exit: full session drivable via curl/Postman.*
 
-- [x] **API-2** · P0 · S — Session bootstrap / profile endpoint
-  - `POST /api/sessions` → creates (or resumes) a `tutoring_sessions` row (DB-4), returns session id, profile, initial phase (Intro), gap topics, locked problem.
-  - Rebuilds profile fresh (KP-2). Returns sidebar data (mastery bars, gap/ok/checking tags, stats scaffold).
-  - Conversation history is held in the student-keyed Redis cache, not the session row. On resume, rehydrate history from cache (cache miss → fresh chat against the rebuilt profile, phase from the durable row).
-  - On completion: mark the row `completed` and delete the cached transcript.
-- [x] **API-1** · P0 · M — Tutoring turn endpoint
-  - `POST /api/sessions/[id]/message` → reply + phase + gap status. Auth-guarded to owning student.
-  - Streams tokens if TS-3 streams.
+- [x] **API-2** · P0 · S — Session bootstrap / profile endpoint (`app/api/sessions/route.ts`)
+  **Overview:** Owns the "create or resume" lifecycle for a per-problem session,
+  including the concurrency edge case (two tabs bootstrapping the same problem at once)
+  and the two-store resume (durable phase from Postgres, transcript from the cache with a
+  miss treated as an empty history, never an error).
+  **Acceptance criteria:**
+  - `POST /api/sessions {problemId}` — auth-guarded (`requireUserApi`), 404 if the problem doesn't exist, 403 if the student isn't enrolled in its course.
+  - Resume path: if `getActiveSession` finds a row, rehydrate state via `fromPersisted` and history via `historyCache.get` (`?? []` on miss), return immediately — no new Claude call.
+  - Fresh path: generates the Intro greeting (`openSession`) **before** inserting the `tutoring_sessions` row, so a Claude failure leaves no orphan row.
+  - Concurrent-create race: a unique-violation (`23505`, from migration 0003's partial unique index) on insert falls back to fetching and resuming whichever row won, rather than erroring.
+  - Response is `toSessionResponse(...)`: `{sessionId, phase, status, unlocked, problem, gaps, sidebar, messages}` — `runtime = "nodejs"`, `dynamic = "force-dynamic"`.
+  - `historyCache.set` seeds `[seedMessage, greeting]` on a fresh session so later turns keep the required user-first message alternation.
+
+- [x] **API-1** · P0 · M — Tutoring turn endpoint (`app/api/sessions/[id]/message/route.ts`)
+  **Overview:** One tutoring turn end-to-end over HTTP, streamed. Everything that could
+  change the client's chrome (phase pill, lock state, sidebar) is computed and persisted
+  *before* the byte stream opens, so the very first line of the response is a `meta`
+  frame the client can render immediately, with tokens trickling in after.
+  **Acceptance criteria:**
+  - `POST /api/sessions/[id]/message {message}` — auth-guarded to the owning student (`session.studentId !== user.id` → 403), 409 if the session isn't `active`.
+  - Response is NDJSON (`Content-Type: application/x-ndjson`, `Cache-Control: no-store`): one `{type:"meta",...}` line, then `{type:"token",text}` lines forwarding Claude's `content_block_delta` text events, then a terminal `{type:"done",status}` or `{type:"error",message}` line.
+  - `updateSessionState` (durable row) is written *before* the stream opens; the transcript (`historyCache.append`, or `.delete` on completion) is written only after the full reply text is collected, since it needs the complete assistant turn.
+  - A failure after the 200 status is already sent (mid-stream) can only surface as an `{type:"error"}` frame — documented as a client contract in `TutorShell.tsx`'s stream reader, which must check for it.
 
 ## Milestone 4 — UI (first usable demo)
 *Exit: a person can complete a problem end-to-end in the browser.*
 
-- [x] **FE-1** · P0 · S — Split layout shell (chat left, sidebar right; responsive). Wired to API-2.
-- [x] **FE-2** · P0 · M — Chat panel + phase pills
-  - Sends to API-1, renders (streamed) replies; active pill reflects phase; in-flight/optimistic states.
+- [x] **FE-1** · P0 · S — Split layout shell (`app/tutor/[problemId]/TutorShell.tsx`, `page.tsx`)
+  **Overview:** The page shell and the session-lifecycle client state machine
+  (`LoadState`/`TurnState`) — chat column + sidebar column, responsive (stacks below
+  `lg`). Owns bootstrapping against API-2 on mount; everything else (FE-2/FE-3/FE-4)
+  renders inside regions this ticket defines.
+  **Acceptance criteria:**
+  - `TutorPage` (`page.tsx`) auth-guards via `requireUser()`, then renders `<TutorShell problemId>` client-side — enrollment/ownership is re-checked server-side inside API-2, not here.
+  - `TutorShell` posts to `/api/sessions` on mount, and renders one of: loading note, error note, or the ready two-column layout (`flex-col` on narrow, `lg:flex-row` at `lg:`).
+  - Layout is two independent scroll regions on desktop (chat transcript scrolls, sidebar scrolls) inside a non-scrolling page shell (`lg:h-dvh lg:overflow-hidden` on the outer page).
+
+- [x] **FE-2** · P0 · M — Chat panel + phase pills (`TutorShell.tsx`, `Composer.tsx`, `parseStream.ts`)
+  **Overview:** The primary interaction surface — sends student turns to API-1, renders
+  the streamed reply token-by-token, and reflects the four-phase pill row so the student
+  always knows where they are in Intro → Gap check → Solve → Review.
+  **Acceptance criteria:**
+  - `Composer` sends on Enter (Shift+Enter inserts a newline), disabled while `disabled` is true (nothing typed, in-flight turn, or completed session).
+  - `handleSend` optimistically appends the user bubble immediately, then rolls it back (`fail(...)`) if the request fails or the frame stream errors — the transcript never shows a message the server never accepted.
+  - `TurnState` models `idle | sending | streaming | error` explicitly; the streaming assistant bubble renders live from accumulated `token` frames and is replaced by the finalized message on `done`.
+  - `parseStream.ts` (`splitLines`/`parseFrame`) buffers partial NDJSON lines across `TextDecoder` chunks — a frame split across two network reads must still parse correctly (covered in `parseStream.test.ts`).
+  - `SessionHeader`'s phase pills highlight `session.phase`, sourced from the server's `meta` frame — never inferred client-side.
+
 - [ ] **FE-4** · P0 · S — Locked problem reveal
-  - Hidden during Intro + Gap check; auto-reveals on Solve. Lock derives from server phase only.
+  **Overview:** Most of this ticket's substance already landed as a side effect of
+  `responseShape.ts` (the `unlocked`/`questionContent` firewall, API-2/API-1) and
+  `TutorShell.tsx`'s rendering of `session.problem`: the question text is `null` until
+  `isProblemUnlocked(state)` is true, and the sidebar already shows a "Unlocks after gap
+  check" placeholder in its place (`TutorShell.tsx:286-295`). What's left is closing the
+  ticket out properly — confirming the edge cases and giving the reveal a moment of
+  visual acknowledgment, since right now it's a silent text swap the student could miss.
+  **Acceptance criteria:**
+  - Verify (write a test if one doesn't exist, e.g. in `responseShape.test.ts`) that `toApiProblem` returns `questionContent: null` for every phase except `solve`/`review`, regardless of what's actually stored on the `Problem` row — the server must never leak it early even under a buggy caller.
+  - Verify the resume path: bootstrapping mid-`solve` (or mid-`review`) via API-2 returns the unlocked problem immediately — no extra turn required to "unlock" what a resumed session already earned.
+  - Add a lightweight reveal affordance when `unlocked` flips `false → true` within a live session (e.g. a brief highlight/scroll-into-view on the "Current problem" card) so the transition out of Gap check is noticeable, not just a re-render.
+  - No new server logic should be needed for this ticket — if you find yourself changing `stateMachine.ts` or `responseShape.ts`'s unlock logic, stop and re-check the gap-resolution rules in TS-2 instead of special-casing here.
+
 - [ ] **FE-3** · P1 · M — Knowledge sidebar
-  - Mastery bars (Recharts), per-topic gap/ok/checking tags, live session stats; updates as gaps resolve.
+  **Overview:** The data this ticket needs already exists and is already flowing to the
+  client on every turn — `toSidebar()` (`responseShape.ts:129`) computes `masteryBars:
+  MasteryBar[]` (`{topicId, name, mastery, status, isPrerequisite}`) as part of the
+  `sidebar` object in every `meta`/bootstrap response — but `TutorShell.tsx` currently
+  only renders `sidebar.tags` (the topic readiness list) and the raw `gapsResolved/
+  gapsTotal` counter, not the mastery bars themselves. This ticket is almost entirely a
+  rendering task, not a data task.
+  **Acceptance criteria:**
+  - Add a mastery-bar chart to the sidebar column in `TutorShell.tsx`, driven by `session.sidebar.masteryBars` — do **not** re-fetch from Supabase client-side; the data is already in props (unlike `app/courses/[courseId]/TopicMasteriesChart.tsx`, which fetches its own data and is the wrong pattern to copy verbatim here — copy its Recharts/`ChartContainer` wiring, not its `useEffect` fetch).
+  - Reuse the shared chart primitives in `app/components/ui/chart.tsx` (`ChartContainer`, `ChartTooltip`) for visual consistency with the existing mastery chart on the course page.
+  - Visually distinguish `isPrerequisite: true` bars (this problem's gap topics) from the rest of the course's topics — e.g. grouped first, or a distinct accent color — so the sidebar reads as "what matters right now" plus "the fuller picture," not one flat list.
+  - Render `mastery: null` bars distinctly (e.g. empty/hatched) rather than as a zero-height bar, matching the "unassessed ≠ zero" rule from `gaps.ts`.
+  - The sidebar already updates automatically each turn (the whole `sidebar` object comes from the `meta` frame) — don't add a separate poll/refetch; verify the new chart re-renders correctly as `session.sidebar` changes across turns, including the moment a gap flips `gap → resolved`.
+  - Session stats (`stats.gapsResolved`/`gapsTotal`, `stats.phase`) already render as plain text — folding them into whatever stats panel this ticket produces is fine, but isn't required to close it out.
+  - No unit tests expected here (UI is untested per this repo's Vitest/node-only setup) — manually verify via `npm run dev` against a seeded student with a mix of GAP/OK/UNASSESSED topics.
 
 ## Milestone 5 — Misconception pipeline (close the loop)
 *Exit: wrong answers feed back into the profile over time. Deferred safely — nothing in the live session blocks on it.*
 
 - [ ] **MI-1** · P1 · M — Haiku misconception inference call
-  - `inferMisconception({problem, correctAnswer, studentAnswer, topicId})` → `string | null`.
-  - 5–10 words, ≤100 chars; clean `null` for careless mistakes. Prefer structured/JSON output.
-  - Model `claude-haiku-4-5-20251001`. Replaces the placeholder in `app/queries/claude.ts`.
-- [ ] **MI-2** · P1 · M — Semantic dedup *(resolve dedup-method decision first)*
-  - Compare inferred string to existing weaknesses for student+topic → matching id or "novel".
-  - Configurable, documented threshold.
+  **Overview:** Replaces the always-`null` stub in `app/queries/claude.ts` with a real
+  classification call. This is the first write into the profile that isn't a direct
+  mastery increment — it's meant to capture *why* an answer was wrong (a specific,
+  short misconception string) so the tutor can address it by name next session, not just
+  know the student got it wrong. Model the structured-output pattern directly on
+  `app/tutor/judge.ts` (`output_config: {format: {type: "json_schema", schema}}`) — the
+  same technique, a different schema and prompt.
+  **Acceptance criteria:**
+  - `inferMisconception({problem, correctAnswer, studentAnswer, topicId})` (the existing exported type/signature in `claude.ts` — don't change it, `conversation.ts` already depends on it) calls Haiku with `MISCONCEPTION_MODEL` (`constants.ts`, currently `"claude-haiku-4-5-20251001"`) using a JSON-schema structured output, not free-text parsing.
+  - Output is a single short string, 5–10 words, hard-capped at 100 chars (matches the `student_topic_weaknesses.description` column from DB-2) — truncate defensively even though `insertWeakness` also truncates, so a caller that skips the insert path still gets a bounded string.
+  - Returns `null` — not an empty string — for a careless/arithmetic slip that doesn't reflect a conceptual misconception (e.g. a sign error vs. a genuine misunderstanding of the operation); the prompt must make this distinction explicit since it's the main judgment call the model is making.
+  - A malformed/unparseable model response resolves to `null`, mirroring `judge.ts`'s "never let a flaky model corrupt state" failure mode — a bad MI-1 call must never throw and take down `handleTurn`.
+  - Unit-tested with a fake/injected Anthropic client (same pattern as `judge.test.ts`) — no live API calls in tests. Update the existing `claude.test.ts` (currently pins the "always null" stub contract) to cover the real classification cases: careless-mistake → `null`, genuine misconception → truncated string, malformed response → `null`.
+
+- [ ] **MI-2** · P1 · M — Semantic dedup
+  **Overview:** Without this, every wrong answer on the same misconception creates a new
+  `student_topic_weaknesses` row instead of incrementing one — `observed_count` (DB-2)
+  would stay meaningless and the profile would fill with near-duplicate strings like "adds
+  numerators without a common denominator" / "forgets to find common denominator." The
+  decided approach is a Haiku classification call (not embeddings/fuzzy string match) —
+  same structured-output pattern as MI-1/`judge.ts`.
+  **Acceptance criteria:**
+  - New function, e.g. `matchWeakness(existing: TopicWeakness[], candidate: string): Promise<{ id: string } | "novel">` — takes the student+topic's existing weaknesses (from `getWeaknesses`, already scoped by `weaknesses.ts`) and the newly-inferred MI-1 string.
+  - Calls Haiku with a structured output classifying the candidate against each existing description for the *same topic* (dedup is scoped per topic, not global) — returns the matching row's `id`, or the literal `"novel"` when none match closely enough.
+  - The similarity threshold/criterion is a named constant (alongside `GAP_THRESHOLD` in `constants.ts` or colocated with this function) with a comment on why that bar was chosen — "configurable, documented" per the original decision, not a magic number buried in a prompt string.
+  - Unit-tested with an injected fake Anthropic client: exact paraphrase → match, unrelated misconception on the same topic → novel, empty existing-weaknesses list → always novel (no Haiku call needed in that case — skip the call entirely as a cost/latency optimization).
+
 - [ ] **MI-3** · P1 · S — Async write path + un-stub TS-3
-  - Triggered async on wrong answer (Next.js `after()`), never blocks the reply.
-  - Novel → `insertWeakness`; duplicate → `incrementWeakness`; `null` → no write.
-  - Failures logged and swallowed. Ensure writes land before the next problem's profile rebuild.
-  - Flip the TS-3 MI no-op (step from M2) to the real call.
+  **Overview:** Wires MI-1 + MI-2 into the live turn handler and — this is the part
+  that actually changes existing code, not just adds new code — fixes a real gap between
+  the current implementation and the recorded decision. Today, `conversation.ts:171`
+  `await`s `fireMisconception` **inline, before building the reply stream**, which means
+  every wrong answer currently pays the Haiku misconception latency before the student sees
+  the tutor's next message. The decision on record says this must never block the reply.
+  **Acceptance criteria:**
+  - Replace `inferMisconception`'s stubbed injection in `ConversationDeps` with the real MI-1 call, and follow it with MI-2's dedup + the correct `insertWeakness`/`incrementWeakness` write (novel → insert, match → increment, `null` → no write at all).
+  - The misconception call + write must not block the reply: restructure so `handleTurn` either (a) returns a detached promise for the caller to hand to Next.js `after()` in the API-1 route, or (b) the route itself fires it via `after()` once it has what it needs from `handleTurn`'s result (topic id, problem, wrong answer, correct answer) — either way, the stream in API-1 must start flowing before this call resolves, not after.
+  - Failures in the misconception call or the write are logged and swallowed (matching every other query function's error contract in this repo) — a Haiku hiccup must never surface as a user-facing error or fail the turn.
+  - Ordering guarantee: the write must land before the *next* profile rebuild that could read it — since `buildProfile` is called fresh at the top of every turn and every bootstrap (KP-2), and `after()` runs before the response is fully flushed to the client, this should hold naturally, but verify it explicitly (e.g. an integration-style test that runs a turn, awaits the deferred write, then rebuilds the profile and asserts the weakness appears) rather than assuming it.
+  - Update `conversation.test.ts` to assert the non-blocking contract (the returned stream must be obtainable without waiting on the misconception promise) in addition to the existing wrong-answer-fires-MI assertion.
 
 ---
 
@@ -121,3 +284,11 @@ inference) · shadcn/ui + Radix + Tailwind 4 + Recharts.
 - **Earliest demo:** M1→M4 is the fastest path to clicking through a real session; the P1 sidebar (FE-3) is last so its absence doesn't block the demo.
 
 > Note: FE-3 is labeled P1 but the knowledge sidebar is the platform's signature UI — bump to P0 if this goes in front of stakeholders.
+
+## What's actually left for the MVP
+
+Milestones 1–3 are fully shipped (data layer, tutor brain, HTTP). Of Milestone 4,
+FE-1/FE-2 are shipped; **FE-4 is nearly done** (verify + polish, see above) and **FE-3
+needs a rendering pass over data that's already being sent to the client**. Milestone 5
+(MI-1/MI-2/MI-3) is unstarted but explicitly deferrable — the live tutoring flow already
+calls a stubbed no-op in its place, so shipping without it does not block a usable demo.
