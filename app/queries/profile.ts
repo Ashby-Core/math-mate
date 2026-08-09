@@ -52,7 +52,7 @@ export async function buildProfile(
     courseName: course?.name ?? "",
     student: {
       id: studentId,
-      name: profile ? `${profile.firstName} ${profile.lastName}`.trim() : "",
+      firstName: profile?.firstName ?? "",
     },
     topicMasteryScores,
     weaknesses: weaknessMap,

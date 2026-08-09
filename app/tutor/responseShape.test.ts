@@ -19,7 +19,7 @@ const PROBLEM_ID = "99999999-9999-9999-9999-999999999999" as UUID;
 // FRACTIONS=0.3 (gap), DIVISION=0.5 (gap), DECIMALS=null (unassessed).
 const profile: StudentProfile = {
   courseName: "Intro to Fractions",
-  student: { id: "s1", name: "Ada Lovelace" },
+  student: { id: "s1", firstName: "Ada" },
   topicMasteryScores: {
     [FRACTIONS]: { name: "Adding Fractions", mastery: 0.3 },
     [DIVISION]: { name: "Long Division", mastery: 0.5 },

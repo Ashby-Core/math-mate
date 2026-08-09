@@ -69,7 +69,7 @@ export type TopicWeaknessEntry = { name: string; items: string[] };
 
 export type StudentProfile = {
   courseName: string;
-  student: { id: string; name: string };
+  student: { id: string; firstName: string };
   topicMasteryScores: Record<string, TopicMasteryEntry>;
   weaknesses: Record<string, TopicWeaknessEntry>;
 };

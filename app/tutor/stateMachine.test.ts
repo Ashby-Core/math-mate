@@ -34,7 +34,7 @@ function makeProblem(tops: UUID[]): Problem {
 function fullProfile(): StudentProfile {
   return {
     courseName: "Intro to Fractions",
-    student: { id: "student-1", name: "Ada Lovelace" },
+    student: { id: "student-1", firstName: "Ada" },
     topicMasteryScores: {
       [FRACTIONS]: { name: "Adding Fractions", mastery: 0.3 },
       [DIVISION]: { name: "Long Division", mastery: 0.9 },

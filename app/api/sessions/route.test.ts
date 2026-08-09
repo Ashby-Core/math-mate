@@ -48,7 +48,7 @@ const FRACTIONS = "11111111-1111-1111-1111-111111111111" as UUID;
 
 const profile = {
   courseName: "Intro to Fractions",
-  student: { id: "u1", name: "Ada Lovelace" },
+  student: { id: "u1", firstName: "Ada" },
   topicMasteryScores: { [FRACTIONS]: { name: "Adding Fractions", mastery: 0.3 } },
   weaknesses: {},
 };

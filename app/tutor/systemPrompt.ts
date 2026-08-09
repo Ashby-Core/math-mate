@@ -42,7 +42,7 @@ Style:
  * NOT cached.
  */
 function renderContext(profile: StudentProfile, problem: Problem): string {
-  const firstName = profile.student.name.split(" ")[0] || "the student";
+  const firstName = profile.student.firstName || "the student";
 
   const topicLines = resolvePrerequisites(profile, problem).map((topic) => {
     const name = topic.name ?? `(unknown topic ${topic.topicId})`;

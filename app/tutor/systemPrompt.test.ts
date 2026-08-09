@@ -29,7 +29,7 @@ describe("buildSystemPrompt", () => {
   it("returns a cacheable static block followed by the dynamic context", () => {
     const profile: StudentProfile = {
       courseName: "Intro to Fractions",
-      student: { id: "student-1", name: "Ada Lovelace" },
+      student: { id: "student-1", firstName: "Ada" },
       topicMasteryScores: { [FRACTIONS]: { name: "Adding Fractions", mastery: 0.3 } },
       weaknesses: {},
     };
@@ -48,7 +48,7 @@ describe("buildSystemPrompt", () => {
   it("labels a below-threshold prerequisite as a gap with its misconception", () => {
     const profile: StudentProfile = {
       courseName: "Intro to Fractions",
-      student: { id: "student-1", name: "Ada Lovelace" },
+      student: { id: "student-1", firstName: "Ada" },
       topicMasteryScores: {
         [FRACTIONS]: { name: "Adding Fractions", mastery: 0.3 },
       },
@@ -73,7 +73,7 @@ describe("buildSystemPrompt", () => {
   it("classifies mixed gap / ok / unassessed prerequisites", () => {
     const profile: StudentProfile = {
       courseName: "Intro to Fractions",
-      student: { id: "student-1", name: "Ada Lovelace" },
+      student: { id: "student-1", firstName: "Ada" },
       topicMasteryScores: {
         [FRACTIONS]: { name: "Adding Fractions", mastery: 0.3 },
         [DIVISION]: { name: "Long Division", mastery: 0.9 },
@@ -98,7 +98,7 @@ describe("buildSystemPrompt", () => {
   it("produces a stable shape for an empty profile", () => {
     const profile: StudentProfile = {
       courseName: "",
-      student: { id: "student-1", name: "" },
+      student: { id: "student-1", firstName: "" },
       topicMasteryScores: {},
       weaknesses: {},
     };
@@ -115,7 +115,7 @@ describe("buildSystemPrompt", () => {
 describe("buildSystemPrompt — turn context (TS-3)", () => {
   const profile: StudentProfile = {
     courseName: "Intro to Fractions",
-    student: { id: "student-1", name: "Ada Lovelace" },
+    student: { id: "student-1", firstName: "Ada" },
     topicMasteryScores: { [FRACTIONS]: { name: "Adding Fractions", mastery: 0.3 } },
     weaknesses: {},
   };

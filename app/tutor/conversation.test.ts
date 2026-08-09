@@ -20,7 +20,7 @@ const PROBLEM_ID = "99999999-9999-9999-9999-999999999999" as UUID;
 function makeProfile(mastery: number | null): StudentProfile {
   return {
     courseName: "Intro to Fractions",
-    student: { id: "student-1", name: "Ada Lovelace" },
+    student: { id: "student-1", firstName: "Ada" },
     topicMasteryScores: { [FRACTIONS]: { name: "Adding Fractions", mastery } },
     weaknesses: {},
   };

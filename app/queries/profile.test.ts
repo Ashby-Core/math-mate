@@ -41,7 +41,7 @@ describe("buildProfile", () => {
 
     expect(profile).toEqual({
       courseName: "Intro to Fractions",
-      student: { id: "u1", name: "Ada Lovelace" },
+      student: { id: "u1", firstName: "Ada" },
       topicMasteryScores: {
         t1: { name: "Adding Fractions", mastery: 0.5 },
         t2: { name: "Subtracting", mastery: null },
@@ -63,7 +63,7 @@ describe("buildProfile", () => {
 
     expect(profile).toEqual({
       courseName: "",
-      student: { id: "u1", name: "" },
+      student: { id: "u1", firstName: "" },
       topicMasteryScores: {},
       weaknesses: {},
     });
