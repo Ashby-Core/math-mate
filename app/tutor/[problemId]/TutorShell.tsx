@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import type { Phase } from "@/app/tutor/stateMachine";
 import type { DisplayMessage, SessionResponse } from "@/app/tutor/responseShape";
 import { parseFrame, splitLines } from "@/app/tutor/parseStream";
@@ -10,6 +10,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/app/components/ui/card";
+import { cn } from "@/lib/utils";
 import Composer from "./Composer";
 
 // The split layout shell: chat on the left, knowledge sidebar on the right,
@@ -41,6 +42,28 @@ type LoadState =
 export default function TutorShell({ problemId }: { problemId: string }) {
   const [state, setState] = useState<LoadState>({ status: "loading" });
   const [composerText, setComposerText] = useState("");
+
+  // Reveal affordance: flash + scroll the "Current problem" card the moment
+  // `unlocked` flips false -> true within this session. `prevUnlockedRef`
+  // starts `null` so a resume that's already unlocked just records the
+  // baseline silently instead of flashing on mount.
+  const problemCardRef = useRef<HTMLDivElement>(null);
+  const prevUnlockedRef = useRef<boolean | null>(null);
+  const [justUnlocked, setJustUnlocked] = useState(false);
+  const unlocked = state.status === "ready" ? state.session.problem.unlocked : false;
+
+  useEffect(() => {
+    if (state.status !== "ready") return;
+    const wasUnlocked = prevUnlockedRef.current;
+    prevUnlockedRef.current = unlocked;
+    if (wasUnlocked === null || wasUnlocked === unlocked) return;
+    if (unlocked) {
+      setJustUnlocked(true);
+      problemCardRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      const timeout = setTimeout(() => setJustUnlocked(false), 1600);
+      return () => clearTimeout(timeout);
+    }
+  }, [unlocked, state.status]);
 
   useEffect(() => {
     let cancelled = false;
@@ -279,29 +302,37 @@ export default function TutorShell({ problemId }: { problemId: string }) {
           </CardContent>
         </Card>
 
-        <Card size="sm">
-          <CardHeader>
-            <CardTitle>Current problem</CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-2">
-            <p className="text-muted-foreground text-xs">
-              Problem {session.problem.orderIndex + 1}
-            </p>
-            {/* Question text is gated behind the server phase — null until Solve. */}
-            {session.problem.questionContent ? (
-              <p>{session.problem.questionContent}</p>
-            ) : (
-              <p className="text-muted-foreground">Unlocks after gap check.</p>
-            )}
-            <div className="text-muted-foreground mt-2 flex justify-between text-xs">
-              <span>Gaps resolved</span>
-              <span>
-                {session.sidebar.stats.gapsResolved}/
-                {session.sidebar.stats.gapsTotal}
-              </span>
-            </div>
-          </CardContent>
-        </Card>
+        <div
+          ref={problemCardRef}
+          className={cn(
+            "rounded-xl transition-shadow duration-700",
+            justUnlocked && "ring-2 ring-primary",
+          )}
+        >
+          <Card size="sm">
+            <CardHeader>
+              <CardTitle>Current problem</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-2">
+              <p className="text-muted-foreground text-xs">
+                Problem {session.problem.orderIndex + 1}
+              </p>
+              {/* Question text is gated behind the server phase — null until Solve. */}
+              {session.problem.questionContent ? (
+                <p>{session.problem.questionContent}</p>
+              ) : (
+                <p className="text-muted-foreground">Unlocks after gap check.</p>
+              )}
+              <div className="text-muted-foreground mt-2 flex justify-between text-xs">
+                <span>Gaps resolved</span>
+                <span>
+                  {session.sidebar.stats.gapsResolved}/
+                  {session.sidebar.stats.gapsTotal}
+                </span>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </aside>
     </div>
   );

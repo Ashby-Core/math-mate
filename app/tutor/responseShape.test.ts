@@ -47,6 +47,7 @@ const solve: TutoringState = {
   status: "active",
   gaps: gaps.map((g) => ({ ...g, resolved: true })),
 };
+const review: TutoringState = { ...solve, phase: "review" };
 
 const tagFor = (topics: { topicId: string; status: string }[], id: string) =>
   topics.find((t) => t.topicId === id)?.status;
@@ -71,6 +72,27 @@ describe("toApiProblem — locked gating", () => {
     const solved = toApiProblem(profile, problem, solve);
     expect(solved.unlocked).toBe(true);
     expect(solved.questionContent).toBe(problem.questionContent);
+  });
+
+  it("reveals questionContent in review too, regardless of what's stored on the Problem row", () => {
+    const reviewed = toApiProblem(profile, problem, review);
+    expect(reviewed.unlocked).toBe(true);
+    expect(reviewed.questionContent).toBe(problem.questionContent);
+  });
+
+  it("locks every phase except solve/review", () => {
+    const lockedPhases = [intro, gapCheck];
+    const unlockedPhases = [solve, review];
+    for (const state of lockedPhases) {
+      expect(toApiProblem(profile, problem, state).unlocked).toBe(false);
+      expect(toApiProblem(profile, problem, state).questionContent).toBeNull();
+    }
+    for (const state of unlockedPhases) {
+      expect(toApiProblem(profile, problem, state).unlocked).toBe(true);
+      expect(toApiProblem(profile, problem, state).questionContent).toBe(
+        problem.questionContent,
+      );
+    }
   });
 });
 
