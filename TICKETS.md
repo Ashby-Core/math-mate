@@ -148,6 +148,110 @@ rediscover the architecture from scratch.
   - All dependencies (`Anthropic`, `SupabaseClient`, `inferMisconception`) are injected via `ConversationDeps` so the handler is unit-testable with fakes — no real network/DB calls in `conversation.test.ts`.
   - Returns the reply as an unconsumed `Anthropic.MessageStream` (`.stream`) — the caller (API-1) is responsible for forwarding it; `handleTurn` itself never awaits it to completion.
 
+- [ ] **TS-4** · P1 · S — Solve judge can't tell a coincidental value match from the real final answer
+  **Overview:** Found while designing a fix elsewhere: the `solve`-phase judge
+  (`judge.ts:70-78`) marks `correct: true` whenever the student's latest message is
+  "mathematically equivalent to the problem's FINAL answer" — a pure value check,
+  with no signal for whether the tutor's last message was actually asking for the
+  overall final answer versus an intermediate scaffolding quantity. `advance`'s
+  `solve` case (`stateMachine.ts:130-133`) then treats *any* correct
+  `SOLVE_ATTEMPT` as finishing the problem. If a problem's scaffold ever produces
+  an intermediate value that happens to numerically coincide with the final
+  answer (e.g. a quantity computed midway through multi-step arithmetic that
+  equals the eventual result), the judge has no way to distinguish "the student
+  just answered a sub-step that happens to match" from "the student reached the
+  real end" — the session would collapse straight to `review`/`completed` before
+  the student actually worked through the rest of the scaffold.
+  **Acceptance criteria:**
+  - A regression test (fixture in `judge.test.ts`, phase `solve`) covers a
+    scaffold turn where the tutor's last message asks for an intermediate
+    quantity and the student's correct answer to *that* question happens to equal
+    `problem.correctAnswer` — the judge must not return `correct: true` on value
+    equivalence alone.
+  - `judgeSystemPrompt`'s `solve` branch is updated so the judge weighs both (a)
+    value equivalence to the final answer, and (b) whether the tutor's most recent
+    message was itself asking for the problem's overall final answer (not an
+    intermediate step) — `history` already carries the tutor's prior turns, so
+    this needs no new plumbing into `JudgeArgs`, only a prompt fix using context
+    the judge already receives.
+  - Explicitly test the inverse case too (still covered by the existing example in
+    the prompt): a genuinely-final correct answer still judges `correct: true` —
+    this ticket must not regress normal completion.
+  - Document the residual risk if the LLM judge still misjudges "was this the
+    final question" occasionally — same class of accepted risk as a flaky judge
+    parse failure — but bias any remaining uncertainty toward *not* completing
+    early, since a false "not yet done" just costs one extra scaffold turn while a
+    false "done" ends the session incorrectly.
+  - No `stateMachine.ts` changes expected — if a judge-only fix can't reliably make
+    this distinction, escalate rather than special-case `advance`'s `solve` logic
+    (mirrors the same "don't special-case the state machine" guidance FE-4 gives
+    for its own scope).
+
+- [ ] **TS-5** · P1 · M — Record wrong attempts in mastery counts
+  **Overview:** Found while auditing the mastery-update path: `updateMasteryCounts`
+  (`app/queries/masteries.ts:69`) is only ever called from one place —
+  `conversation.ts:183`, on the turn `isComplete(newState)` flips `false`→`true` —
+  and always with `wasCorrect: true`. That's not a missed `if`; it's structurally
+  guaranteed, because `advance`'s `solve` case (`stateMachine.ts:130-133`) no-ops on
+  an incorrect `SOLVE_ATTEMPT` (stays in `solve`), so `solve`/`gap_check` can only
+  ever be *left* via a correct answer. The result: `problems_attempted` and
+  `problems_correct` always increment together, so any topic behind a completed
+  problem reads as `mastery: 1.0` forever, no matter how many wrong tries it took —
+  the exact "struggled but eventually got it" signal mastery is supposed to
+  capture never reaches the DB.
+  **Design decision (resolved in conversation):** the two judged phases need
+  different granularity, because `correct` means different things in each:
+  - `gap_check`: each `GAP_ATTEMPT` is graded against whatever question the tutor
+    *just asked this turn* (`judge.ts:56-58`) — a nudge/simplified follow-up after
+    a wrong answer is still a locally meaningful, single-topic data point, not an
+    artifact. **Every judged `GAP_ATTEMPT` counts as an attempt at `currentGap`'s
+    topic** — call `updateMasteryCounts(supabase, studentId, currentGap.topicId,
+    event.correct)` live, per turn, in `handleTurn`.
+  - `solve`: each `SOLVE_ATTEMPT` is graded against the problem's fixed *final*
+    answer regardless of what sub-question the tutor actually asked
+    (`judge.ts:70-76`), so a correct intermediate scaffolding step is guaranteed
+    `correct: false` by design — that's judge noise, not a real gap in
+    understanding, and must not be counted as a wrong attempt per turn. Instead of
+    deferring to completion (today's approach), write once, live, on the **first**
+    judged `SOLVE_ATTEMPT` of the session — whatever its correctness — for every
+    topic in `problem.tops`, then suppress any further `problem.tops` writes for
+    the rest of the session. This mirrors how `gap_check` already writes live per
+    attempt, and (as a side effect) means a session abandoned after one wrong
+    solve attempt still leaves a real mastery data point instead of recording
+    nothing.
+    (A correct-but-premature judge verdict caused by a coincidental value match
+    mid-scaffold is a separate, already-tracked risk — see **TS-4** — not
+    something this ticket needs to re-solve.)
+  **Acceptance criteria:**
+  - `TutoringState` gains `solveAttemptRecorded: boolean` (default `false`),
+    persisted alongside `gaps` in the `gap_state` jsonb (`{ gaps,
+    solveAttemptRecorded }`) — `fromPersisted` normalizes a missing/legacy value
+    to `false`, same pattern already used for a missing `gaps` array.
+  - `handleTurn` calls `updateMasteryCounts` for `currentGap(state).topicId` on
+    *every* judged `GAP_ATTEMPT` (correct or not).
+  - `handleTurn` calls `updateMasteryCounts` once per topic in `problem.tops` with
+    `wasCorrect: event.correct` the first time a `SOLVE_ATTEMPT` is judged this
+    session (`state.solveAttemptRecorded === false`), then flips
+    `solveAttemptRecorded` to `true` on the returned state; later `SOLVE_ATTEMPT`s
+    in the same session never write to `problem.tops` masteries again.
+  - Removes the existing completion-gated loop (`conversation.ts:182-189`) — this
+    ticket replaces that write path, it doesn't add a second one alongside it.
+  - Gap topics still legitimately get two mastery data points per session (the
+    live per-turn gap-check writes, plus the one first-solve-attempt write, since
+    gap topics are also listed in `problem.tops`) — document this as intentional,
+    not a bug to dedupe later.
+  - Both writes are plain Supabase upserts (no Claude call) — stay `await`ed
+    inline like today; this ticket does not touch the misconception-pipeline
+    latency question (that's MI-3's job).
+  - `conversation.test.ts` covers: a wrong `GAP_ATTEMPT` increments
+    `problems_attempted` without `problems_correct`; a gap resolved after
+    multiple tries produces multiple `updateMasteryCounts` calls; a `solve`
+    session whose first attempt is wrong records `wasCorrect: false`
+    immediately (not deferred to eventual completion); a second/third
+    `SOLVE_ATTEMPT` in the same session never fires another `problem.tops`
+    write, regardless of its correctness. `stateMachine.test.ts` covers the new
+    field's persistence round-trip and its missing-field default.
+
 ## Milestone 3 — Wire it to HTTP
 *Exit: full session drivable via curl/Postman.*
 
