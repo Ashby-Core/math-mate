@@ -12,6 +12,13 @@ export type TurnContext = {
   currentGap: GapEntry | null;
   resolvedCount: number;
   totalGaps: number;
+  /**
+   * solve only: the student's last value matched the problem's final answer,
+   * but wasn't flagged as their final-answer attempt (so the phase correctly
+   * stayed "solve" rather than completing). Lets the tutor nudge the student
+   * toward confirming instead of independently deciding the problem is done.
+   */
+  valueMatchesFinalAnswer?: boolean;
 };
 
 /**
@@ -98,14 +105,19 @@ function renderTurn(turn: TurnContext): string {
         : "All gaps are resolved. Move the student toward the problem.";
       break;
     case "solve":
-      line =
-        turn.totalGaps === 0
-          ? `This problem has no prerequisite gaps to check. If you haven't already, briefly acknowledge that (e.g. "You're solid on the prerequisites here, so let's dive right in") before scaffolding. Scaffold the student through the problem step by step — never state the final answer.`
-          : "All gaps are resolved and the problem is unlocked. Scaffold the student through it step by step — never state the final answer.";
+      if (turn.valueMatchesFinalAnswer) {
+        line =
+          "The student's last value is mathematically correct for the problem's final answer, but they have not flagged it as their final-answer attempt yet — the session is deliberately still open. Acknowledge that their value is right, then ask them to confirm this is their final answer (e.g. by turning on the final-answer toggle and resending) so the session can be marked complete. Do not treat the problem as finished yourself, do not write a recap, and do not ask a further scaffolding question — just prompt them to confirm.";
+      } else {
+        line =
+          turn.totalGaps === 0
+            ? `This problem has no prerequisite gaps to check. If you haven't already, briefly acknowledge that (e.g. "You're solid on the prerequisites here, so let's dive right in") before scaffolding. Scaffold the student through the problem step by step — never state the final answer.`
+            : "All gaps are resolved and the problem is unlocked. Scaffold the student through it step by step — never state the final answer.";
+      }
       break;
     case "review":
       line =
-        "The student reached the correct answer. Give a brief, encouraging recap of what they did and the key idea — this ends the session.";
+        "The student's answer has ALREADY been confirmed correct for the WHOLE problem — this is settled, not something to double-check. Do not ask another question, do not continue scaffolding, and do not work through any remaining steps yourself, even if part of the problem looks unaddressed in the conversation so far. Just give a brief, encouraging recap of the key idea that solved it, then stop — this ends the session.";
       break;
   }
   return `## Current turn

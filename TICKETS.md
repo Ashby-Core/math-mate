@@ -148,44 +148,117 @@ rediscover the architecture from scratch.
   - All dependencies (`Anthropic`, `SupabaseClient`, `inferMisconception`) are injected via `ConversationDeps` so the handler is unit-testable with fakes — no real network/DB calls in `conversation.test.ts`.
   - Returns the reply as an unconsumed `Anthropic.MessageStream` (`.stream`) — the caller (API-1) is responsible for forwarding it; `handleTurn` itself never awaits it to completion.
 
-- [ ] **TS-4** · P1 · S — Solve judge can't tell a coincidental value match from the real final answer
+- [x] **TS-4** · P1 · S — Solve judge can't tell a coincidental value match from the real final answer
   **Overview:** Found while designing a fix elsewhere: the `solve`-phase judge
-  (`judge.ts:70-78`) marks `correct: true` whenever the student's latest message is
-  "mathematically equivalent to the problem's FINAL answer" — a pure value check,
-  with no signal for whether the tutor's last message was actually asking for the
-  overall final answer versus an intermediate scaffolding quantity. `advance`'s
-  `solve` case (`stateMachine.ts:130-133`) then treats *any* correct
+  (`judge.ts:70-78`) marked `correct: true` whenever the student's latest message
+  was "mathematically equivalent to the problem's FINAL answer" — a pure value
+  check, with no signal for whether the tutor's last message was actually asking
+  for the overall final answer versus an intermediate scaffolding quantity.
+  `advance`'s `solve` case (`stateMachine.ts:130-133`) then treats *any* correct
   `SOLVE_ATTEMPT` as finishing the problem. If a problem's scaffold ever produces
   an intermediate value that happens to numerically coincide with the final
-  answer (e.g. a quantity computed midway through multi-step arithmetic that
-  equals the eventual result), the judge has no way to distinguish "the student
-  just answered a sub-step that happens to match" from "the student reached the
-  real end" — the session would collapse straight to `review`/`completed` before
-  the student actually worked through the rest of the scaffold.
-  **Acceptance criteria:**
-  - A regression test (fixture in `judge.test.ts`, phase `solve`) covers a
-    scaffold turn where the tutor's last message asks for an intermediate
-    quantity and the student's correct answer to *that* question happens to equal
-    `problem.correctAnswer` — the judge must not return `correct: true` on value
-    equivalence alone.
-  - `judgeSystemPrompt`'s `solve` branch is updated so the judge weighs both (a)
-    value equivalence to the final answer, and (b) whether the tutor's most recent
-    message was itself asking for the problem's overall final answer (not an
-    intermediate step) — `history` already carries the tutor's prior turns, so
-    this needs no new plumbing into `JudgeArgs`, only a prompt fix using context
-    the judge already receives.
-  - Explicitly test the inverse case too (still covered by the existing example in
-    the prompt): a genuinely-final correct answer still judges `correct: true` —
-    this ticket must not regress normal completion.
-  - Document the residual risk if the LLM judge still misjudges "was this the
-    final question" occasionally — same class of accepted risk as a flaky judge
-    parse failure — but bias any remaining uncertainty toward *not* completing
-    early, since a false "not yet done" just costs one extra scaffold turn while a
-    false "done" ends the session incorrectly.
-  - No `stateMachine.ts` changes expected — if a judge-only fix can't reliably make
-    this distinction, escalate rather than special-case `advance`'s `solve` logic
-    (mirrors the same "don't special-case the state machine" guidance FE-4 gives
-    for its own scope).
+  answer, the judge had no way to distinguish "the student just answered a
+  sub-step that happens to match" from "the student reached the real end" — the
+  session would collapse straight to `review`/`completed` early.
+
+  **Escalated (see acceptance criteria below):** a judge-only prompt fix (having
+  the model weigh the tutor's last message via a "disqualifier" clause) was
+  implemented first, per the ticket's original criteria. A live-model eval
+  (`judgeEval.test.ts`, gated on `JUDGE_EVAL=1`) then showed it was unreliable:
+  the model missed the disqualifier 1-2 times out of 5 even when the tutor named
+  the sub-quantity explicitly ("what's 16 / 2?"), and it graded open-ended tutor
+  phrasing ("so what does that give us?") as the final answer 5/5 times — the
+  opposite of the required bias. Manual testing then reproduced the bug directly
+  (`(8 * 6) * 1`: answering the sub-step "8 * 6" with 48 ended the session).
+
+  The fix replaces that inference with an explicit signal: `JudgeArgs` gains
+  `isFinalAttempt?: boolean`, set by a "This is my final answer" toggle in the
+  chat composer (`app/tutor/[problemId]/Composer.tsx`) rather than inferred from
+  conversation text. `judgeTurn` enforces it deterministically — `correct` is
+  forced `false` in `solve` whenever `isFinalAttempt` is not `true`, regardless
+  of the model's own value-equivalence judgment — so the ambiguity is resolved in
+  code, not by a second unreliable LLM inference. This is real new plumbing into
+  `JudgeArgs`, the message route's request body, and the frontend; it was not
+  scoped in the original criteria, but is the explicit escalation path the
+  original criteria called for.
+
+  **Second bug found in manual testing, same fix session:** using the toggle to
+  jump ahead mid-scaffold (flagging a sub-step's value as the final answer, where
+  the two coincide) correctly ended the *session* — `state.status` became
+  `"completed"` — but the streamed Sonnet reply kept scaffolding (e.g. "Nice
+  work! And then 48 * 1?") instead of recapping, because the visible transcript
+  only showed the sub-step and Sonnet's own reading of the unfinished-looking
+  math overrode the phase instruction. This is not a state-machine bug (the
+  transition was already correct) — it's the review-turn instruction in
+  `systemPrompt.ts` (`renderTurn`'s `"review"` case) not being forceful enough. A
+  live-model diagnostic (`reviewReplyEval.test.ts`, gated on `REVIEW_EVAL=1`)
+  reproduced it 3/5 times with the original wording; a strengthened instruction
+  (explicitly stating the answer is already confirmed for the *whole* problem,
+  and to not ask further questions or work any remaining steps regardless of
+  appearances) recapped cleanly 5/5 times against the same fixture.
+
+  **Third bug, mirror image of the second:** the reverse case — toggle left
+  *off*, and a value that objectively matches the final answer with no
+  remaining work (e.g. `f(x) = 3x + 2` at `x = 2`, answered "Is it 8?") —
+  correctly stayed in `solve` (the gate worked as designed), but the tutor's
+  reply still read like a completed recap ("Quick recap of what you did...
+  Nice work!"), since Sonnet's own sense that the problem was fully worked
+  overrode the `solve`-phase instruction, with no signal telling it otherwise.
+  `judgeTurn` already discarded the raw model verdict once the gate forced
+  `correct: false`; the fix keeps it instead. `JudgeResult` gains
+  `valueMatchesFinalAnswer?: boolean` (the model's value-equivalence judgment,
+  independent of the gate), threaded through `handleTurn` into a new
+  `TurnContext.valueMatchesFinalAnswer` field consumed by `renderTurn`'s
+  `solve` case: when true, the tutor is told to acknowledge the value and ask
+  the student to confirm via the toggle, instead of scaffolding further or
+  deciding on its own that the session is over. Verified live 5/5 in
+  `reviewReplyEval.test.ts` against the exact reported conversation.
+
+  **Acceptance criteria (as implemented):**
+  - `judge.test.ts` covers the deterministic gate directly (not just prompt
+    content, since the gate is real code now): `correct` forced `false` when
+    `isFinalAttempt` is unset even if the model reports `correct: true`
+    (reproduces the coincidental-match bug); left alone when `isFinalAttempt` is
+    `true`; the gate is solve-only and never applied in `gap_check`.
+  - `conversation.test.ts` and the message-route tests cover `isFinalAttempt`
+    threading end-to-end: `handleTurn` passes it to the solve-phase judge call
+    only; the route parses `body.isFinalAttempt`, strictly coerces non-`true`
+    values (including truthy non-booleans) to `false`, and forwards it.
+  - Inverse case covered: a genuinely-final correct answer with
+    `isFinalAttempt: true` still judges `correct: true` — completion is not
+    regressed.
+  - `judgeEval.test.ts` (opt-in, `JUDGE_EVAL=1`, real API calls) is the residual
+    check on what's still left to the model: `isAttempt` classification and
+    math-equivalence judgment (fraction/decimal/word-form answers). It also
+    re-confirms the reported bug end-to-end against the live model. This is the
+    only place in the repo that can verify model *behavior* rather than prompt
+    content — the earlier mocked-only tests could not have caught this bug.
+  - Residual risk: the (stubbed) misconception pipeline fires on every non-final
+    solve turn, including a student's genuinely correct sub-step answer that
+    just isn't flagged final — so a false "not yet done" is not free (a bogus MI
+    write plus a discouraging tutor reply), though currently inert since
+    `inferMisconception` is a no-op. A student who forgets to flip the toggle
+    before typing the real answer needs one extra turn — this is intentional per
+    the "bias toward not completing early" requirement.
+  - `stateMachine.ts` is unchanged, per the original criteria — the escalation
+    was scoped to `JudgeArgs`/HTTP/frontend, not to `advance`'s `solve` logic.
+  - `systemPrompt.ts`'s review-turn instruction is strengthened per the second
+    bug above; `systemPrompt.test.ts`'s existing review-turn test still passes
+    unchanged (asserts `"recap"` / `"ends the session"` substrings, both still
+    present in the new wording), and no snapshot covers the review-phase block
+    (the snapshotted cases don't pass a `turn`), so nothing needed updating.
+    `reviewReplyEval.test.ts` is a second opt-in live-model eval, same pattern
+    as `judgeEval.test.ts`, kept as a standing regression check on this
+    instruction's reliability.
+  - Per the third bug: `judge.test.ts` covers `valueMatchesFinalAnswer` — set
+    to the raw model verdict in `solve` regardless of the gate, and always
+    `undefined` in `gap_check`. `systemPrompt.test.ts` covers `renderTurn`'s
+    new `solve` branch (nudge text present and the normal scaffold text absent
+    when `valueMatchesFinalAnswer` is true; unaffected when false/absent).
+    `conversation.test.ts` covers `handleTurn` threading
+    `judged?.valueMatchesFinalAnswer` into the stream call's system prompt.
+    `reviewReplyEval.test.ts` gained a second fixture for this exact scenario,
+    passing 5/5 live.
 
 - [ ] **TS-5** · P1 · M — Record wrong attempts in mastery counts
   **Overview:** Found while auditing the mastery-update path: `updateMasteryCounts`

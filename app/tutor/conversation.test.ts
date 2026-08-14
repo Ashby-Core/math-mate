@@ -169,7 +169,32 @@ describe("handleTurn — gap_check", () => {
 });
 
 describe("handleTurn — solve & completion", () => {
-  it("completes the session and updates mastery on a correct answer", async () => {
+  it("completes the session and updates mastery on a correct final-answer attempt", async () => {
+    const { deps, inferMisconception } = makeDeps({ isAttempt: true, correct: true });
+    const state = solveState();
+    const result = await handleTurn(deps, {
+      profile: GAP_PROFILE,
+      problem: PROBLEM,
+      state,
+      history: [],
+      studentMessage: "7/8",
+      isFinalAttempt: true,
+    });
+
+    expect(result.event).toEqual({ type: "SOLVE_ATTEMPT", correct: true });
+    expect(result.state.status).toBe("completed");
+    expect(result.masteryUpdated).toBe(true);
+    expect(mockUpdate).toHaveBeenCalledTimes(1);
+    expect(mockUpdate).toHaveBeenCalledWith({}, "student-1", FRACTIONS, true);
+    expect(inferMisconception).not.toHaveBeenCalled();
+  });
+
+  it("does not complete on a matching value when isFinalAttempt is not set", async () => {
+    // Reproduces the reported bug at the conversation-handler level: the model
+    // itself judges the value as correct, but without an explicit
+    // isFinalAttempt signal that must never be treated as finishing the
+    // problem — e.g. a scaffolding sub-step whose value coincidentally equals
+    // the final answer.
     const { deps, inferMisconception } = makeDeps({ isAttempt: true, correct: true });
     const state = solveState();
     const result = await handleTurn(deps, {
@@ -180,12 +205,35 @@ describe("handleTurn — solve & completion", () => {
       studentMessage: "7/8",
     });
 
-    expect(result.event).toEqual({ type: "SOLVE_ATTEMPT", correct: true });
-    expect(result.state.status).toBe("completed");
-    expect(result.masteryUpdated).toBe(true);
-    expect(mockUpdate).toHaveBeenCalledTimes(1);
-    expect(mockUpdate).toHaveBeenCalledWith({}, "student-1", FRACTIONS, true);
-    expect(inferMisconception).not.toHaveBeenCalled();
+    expect(result.event).toEqual({ type: "SOLVE_ATTEMPT", correct: false });
+    expect(result.state).toBe(state);
+    expect(result.masteryUpdated).toBe(false);
+    expect(mockUpdate).not.toHaveBeenCalled();
+    // Still an attempt, just not a final one — the (stubbed) MI pipeline fires
+    // the same as any other non-final solve turn.
+    expect(inferMisconception).toHaveBeenCalledTimes(1);
+    // The raw model verdict survives the gate on `judged`, distinct from the
+    // gated `event.correct` above — this is what lets the tutor's prompt tell
+    // the two "not done yet" cases apart (wrong vs. right-but-unflagged).
+    expect(result.judged?.valueMatchesFinalAnswer).toBe(true);
+  });
+
+  it("tells the tutor to nudge toward the toggle, not scaffold or recap, when a value matches but isFinalAttempt is not set", async () => {
+    const { deps, stream } = makeDeps({ isAttempt: true, correct: true });
+    const state = solveState();
+
+    await handleTurn(deps, {
+      profile: GAP_PROFILE,
+      problem: PROBLEM,
+      state,
+      history: [],
+      studentMessage: "7/8",
+    });
+
+    const [streamArgs] = stream.mock.calls[0] as unknown as [{ system: unknown }];
+    const system = JSON.stringify(streamArgs.system);
+    expect(system).toContain("final-answer toggle");
+    expect(system).not.toContain("ends the session");
   });
 
   it("stays in solve and fires MI on a wrong answer", async () => {
@@ -197,6 +245,7 @@ describe("handleTurn — solve & completion", () => {
       state,
       history: [],
       studentMessage: "1",
+      isFinalAttempt: true,
     });
 
     expect(result.state).toBe(state);
@@ -220,6 +269,7 @@ describe("handleTurn — solve & completion", () => {
       state,
       history: [],
       studentMessage: "7/8",
+      isFinalAttempt: true,
     });
 
     expect(mockUpdate).toHaveBeenCalledTimes(1);

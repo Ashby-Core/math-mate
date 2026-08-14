@@ -174,4 +174,38 @@ describe("buildSystemPrompt — turn context (TS-3)", () => {
     expect(blocks[2].text).toContain("All gaps are resolved");
     expect(blocks[2].text).not.toContain("no prerequisite gaps to check");
   });
+
+  it("nudges toward the final-answer toggle instead of scaffolding, when the value matched but wasn't flagged final", () => {
+    const blocks = buildSystemPrompt(profile, makeProblem([FRACTIONS]), {
+      phase: "solve",
+      currentGap: null,
+      resolvedCount: 1,
+      totalGaps: 1,
+      valueMatchesFinalAnswer: true,
+    });
+
+    expect(blocks[2].text).toContain(
+      "they have not flagged it as their final-answer attempt yet",
+    );
+    expect(blocks[2].text).toContain("final-answer toggle");
+    // Tells the tutor explicitly not to decide the session is over itself —
+    // the earlier reported bug was the tutor treating an unflagged match as
+    // if it were a completed recap.
+    expect(blocks[2].text).toContain("do not write a recap");
+    // Must not fall back to the normal scaffold instruction either.
+    expect(blocks[2].text).not.toContain("Scaffold the student through it step by step");
+  });
+
+  it("does not nudge toward the toggle when the value didn't match (normal scaffold continues)", () => {
+    const blocks = buildSystemPrompt(profile, makeProblem([FRACTIONS]), {
+      phase: "solve",
+      currentGap: null,
+      resolvedCount: 1,
+      totalGaps: 1,
+      valueMatchesFinalAnswer: false,
+    });
+
+    expect(blocks[2].text).toContain("All gaps are resolved");
+    expect(blocks[2].text).not.toContain("final-answer toggle");
+  });
 });
