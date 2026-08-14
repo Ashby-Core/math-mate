@@ -174,6 +174,34 @@ describe("POST /api/sessions/[id]/message — guards", () => {
   });
 });
 
+describe("POST /api/sessions/[id]/message — isFinalAttempt", () => {
+  it("forwards isFinalAttempt: true to handleTurn", async () => {
+    await call({ message: "48", isFinalAttempt: true });
+    expect(m.handleTurn).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ isFinalAttempt: true }),
+    );
+  });
+
+  it("defaults to false when omitted", async () => {
+    await call({ message: "48" });
+    expect(m.handleTurn).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ isFinalAttempt: false }),
+    );
+  });
+
+  it("coerces any non-true value to false, not just literal false", async () => {
+    // Strict equality to `true` — a truthy-but-not-boolean value (e.g. a stray
+    // string) must not accidentally flag a turn as a final-answer attempt.
+    await call({ message: "48", isFinalAttempt: "true" });
+    expect(m.handleTurn).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ isFinalAttempt: false }),
+    );
+  });
+});
+
 describe("POST /api/sessions/[id]/message — streaming turn", () => {
   it("streams meta first, then tokens, then done; persists state + transcript", async () => {
     const res = await call({ message: "the denominators match" });

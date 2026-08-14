@@ -15,6 +15,22 @@ function systemPromptOf(create: ReturnType<typeof vi.fn>): string {
   return params.system as string;
 }
 
+/** Pulls the `messages` array out of the first call the mocked `create` received. */
+function messagesOf(
+  create: ReturnType<typeof vi.fn>,
+): Anthropic.MessageParam[] {
+  const [params] = create.mock.calls[0] as [Anthropic.MessageCreateParams];
+  return params.messages;
+}
+
+// NOTE ON COVERAGE: the Anthropic client is mocked, so the *parsed* verdict
+// (isAttempt/correct as the model reports them) is whatever the fixture canned
+// — these tests can't assert how the model judges math equivalence in the
+// wild. What they can and do assert is real behaviour for the one part of
+// solve-phase grading that isn't left to the model: the deterministic
+// isFinalAttempt gate in judgeTurn (see below), plus that the grading rules
+// and tutor's last message reach the model at all.
+
 describe("judgeTurn", () => {
   it("returns the parsed verdict on a well-formed response", async () => {
     const { anthropic } = makeAnthropic(
@@ -27,6 +43,7 @@ describe("judgeTurn", () => {
       history: [],
       studentMessage: "8",
       correctAnswer: "8",
+      isFinalAttempt: true,
     });
 
     expect(result).toEqual({ isAttempt: true, correct: true });
@@ -60,7 +77,7 @@ describe("judgeTurn", () => {
     expect(result).toEqual({ isAttempt: false, correct: false });
   });
 
-  it("grades the solve phase against the final answer, not an intermediate scaffolding step", async () => {
+  it("grades the solve phase's isAttempt/correct fields by value equivalence to the final answer", async () => {
     const { anthropic, create } = makeAnthropic(
       JSON.stringify({ isAttempt: true, correct: true }),
     );
@@ -71,23 +88,125 @@ describe("judgeTurn", () => {
       history: [],
       studentMessage: "6",
       correctAnswer: "8",
+      isFinalAttempt: true,
     });
 
     const system = systemPromptOf(create);
     expect(system).toContain("FINAL answer to the problem is: 8");
-    // `correct` is graded strictly by equivalence to the final answer — not by
-    // guessing whether the message replies to a sub-question or the final one
-    // (that guess is unreliable and previously made the judge never fire true).
     expect(system).toContain(
       "correct: true only if isAttempt AND the value the student gives is mathematically equivalent to the problem's FINAL answer above",
     );
-    expect(system).toContain("isAttempt: true but correct: false");
     // Regression guard: isAttempt must stay a broad "did they give an answer at
     // all" check. Framing it as "the final answer, as opposed to a reply to an
     // intermediate sub-question" made the classifier treat every scaffolded
     // reply (even the genuinely final one) as a sub-question reply, so it
     // never fired true and the session could never complete.
     expect(system).not.toContain("as opposed to replying to one of the tutor's intermediate scaffolding sub-questions");
+    // The prompt no longer asks the model to guess intermediate-vs-final from
+    // conversation context — a live-model eval showed that guess is unreliable
+    // even when the tutor names the sub-quantity explicitly. That decision is
+    // made deterministically in judgeTurn from isFinalAttempt (see below).
+    expect(system).not.toContain("only if the tutor was asking for the final answer");
+  });
+
+  it("forwards history and the student's message to the model", async () => {
+    const { anthropic, create } = makeAnthropic(
+      JSON.stringify({ isAttempt: true, correct: true }),
+    );
+
+    const history: Anthropic.MessageParam[] = [
+      { role: "assistant", content: "What's 8 * 6?" },
+    ];
+
+    await judgeTurn({
+      anthropic,
+      phase: "solve",
+      history,
+      studentMessage: "48",
+      correctAnswer: "48",
+      isFinalAttempt: true,
+    });
+
+    expect(messagesOf(create)).toEqual([
+      { role: "assistant", content: "What's 8 * 6?" },
+      { role: "user", content: "48" },
+    ]);
+  });
+
+  it("forces correct: false in solve when isFinalAttempt is not set, even if the model reports correct: true", async () => {
+    // Reproduces the reported bug: a scaffolding sub-step's value (8 * 6 = 48)
+    // coincidentally equals the problem's final answer, and the model grades
+    // pure value equivalence as true. Without an explicit isFinalAttempt
+    // signal, that must never count as finishing the problem.
+    const { anthropic } = makeAnthropic(
+      JSON.stringify({ isAttempt: true, correct: true }),
+    );
+
+    const result = await judgeTurn({
+      anthropic,
+      phase: "solve",
+      history: [{ role: "assistant", content: "What's 8 * 6?" }],
+      studentMessage: "48",
+      correctAnswer: "48",
+      // isFinalAttempt omitted — the student did not flag this as their
+      // overall-answer attempt.
+    });
+
+    expect(result).toEqual({ isAttempt: true, correct: false });
+  });
+
+  it("does not force correct: false in solve when isFinalAttempt is true", async () => {
+    const { anthropic } = makeAnthropic(
+      JSON.stringify({ isAttempt: true, correct: true }),
+    );
+
+    const result = await judgeTurn({
+      anthropic,
+      phase: "solve",
+      history: [{ role: "assistant", content: "So what's the final answer?" }],
+      studentMessage: "48",
+      correctAnswer: "48",
+      isFinalAttempt: true,
+    });
+
+    expect(result).toEqual({ isAttempt: true, correct: true });
+  });
+
+  it("still forces correct: false when isFinalAttempt is true but the value doesn't match", async () => {
+    const { anthropic } = makeAnthropic(
+      JSON.stringify({ isAttempt: true, correct: false }),
+    );
+
+    const result = await judgeTurn({
+      anthropic,
+      phase: "solve",
+      history: [],
+      studentMessage: "50",
+      correctAnswer: "48",
+      isFinalAttempt: true,
+    });
+
+    // isFinalAttempt only removes the "was this the final question" ambiguity —
+    // it never overrides the model's own math-equivalence judgment.
+    expect(result).toEqual({ isAttempt: true, correct: false });
+  });
+
+  it("does not apply the solve-only isFinalAttempt gate in gap_check", async () => {
+    const { anthropic } = makeAnthropic(
+      JSON.stringify({ isAttempt: true, correct: true }),
+    );
+
+    const result = await judgeTurn({
+      anthropic,
+      phase: "gap_check",
+      history: [],
+      studentMessage: "7/8",
+      currentGap: { topicId: "t1", name: "Adding Fractions", resolved: false },
+      // isFinalAttempt is solve-only and left unset here; gap_check correctness
+      // must not be affected by it either way.
+    });
+
+    expect(result).toEqual({ isAttempt: true, correct: true });
   });
 
   it("grades the gap_check phase against the named prerequisite topic", async () => {

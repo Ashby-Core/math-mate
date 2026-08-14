@@ -114,9 +114,11 @@ export async function handleTurn(
     state: TutoringState;
     history: Anthropic.MessageParam[];
     studentMessage: string;
+    /** solve only: student flagged this message as their final-answer attempt. */
+    isFinalAttempt?: boolean;
   },
 ): Promise<HandleTurnResult> {
-  const { profile, problem, state, history, studentMessage } = args;
+  const { profile, problem, state, history, studentMessage, isFinalAttempt } = args;
   const fireMisconception = deps.inferMisconception ?? inferMisconception;
 
   // 1. Derive the transition event for this phase (judging only where needed).
@@ -142,6 +144,7 @@ export async function handleTurn(
       history,
       studentMessage,
       correctAnswer: problem.correctAnswer,
+      isFinalAttempt,
     });
     if (judged.isAttempt)
       event = { type: "SOLVE_ATTEMPT", correct: judged.correct };

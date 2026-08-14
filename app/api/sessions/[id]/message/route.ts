@@ -50,9 +50,11 @@ export async function POST(
 
   // Parse + validate the body.
   let message: unknown;
+  let isFinalAttempt: unknown;
   try {
     const body = await req.json();
     message = body?.message;
+    isFinalAttempt = body?.isFinalAttempt;
   } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
@@ -99,7 +101,14 @@ export async function POST(
   try {
     result = await handleTurn(
       { anthropic: getAnthropic(), supabase },
-      { profile, problem, state, history, studentMessage: message },
+      {
+        profile,
+        problem,
+        state,
+        history,
+        studentMessage: message,
+        isFinalAttempt: isFinalAttempt === true,
+      },
     );
   } catch (err) {
     console.error("Error handling turn:", err);

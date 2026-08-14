@@ -42,6 +42,7 @@ type LoadState =
 export default function TutorShell({ problemId }: { problemId: string }) {
   const [state, setState] = useState<LoadState>({ status: "loading" });
   const [composerText, setComposerText] = useState("");
+  const [isFinalAttempt, setIsFinalAttempt] = useState(false);
 
   // Reveal affordance: flash + scroll the "Current problem" card the moment
   // `unlocked` flips false -> true within this session. `prevUnlockedRef`
@@ -104,8 +105,10 @@ export default function TutorShell({ problemId }: { problemId: string }) {
 
   async function handleSend(sessionId: string, text: string) {
     const userMessage: DisplayMessage = { role: "user", content: text };
+    const finalAttempt = isFinalAttempt;
 
     setComposerText("");
+    setIsFinalAttempt(false);
     setState((s) =>
       s.status !== "ready"
         ? s
@@ -121,6 +124,7 @@ export default function TutorShell({ problemId }: { problemId: string }) {
 
     const fail = (message: string) => {
       setComposerText(text);
+      setIsFinalAttempt(finalAttempt);
       setState((s) => {
         if (s.status !== "ready") return s;
         // Drop the optimistic user bubble — nothing was accepted, so the
@@ -138,7 +142,7 @@ export default function TutorShell({ problemId }: { problemId: string }) {
       const res = await fetch(`/api/sessions/${sessionId}/message`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text }),
+        body: JSON.stringify({ message: text, isFinalAttempt: finalAttempt }),
       });
 
       if (!res.ok || !res.body) {
@@ -274,6 +278,9 @@ export default function TutorShell({ problemId }: { problemId: string }) {
               onChange={setComposerText}
               onSend={(text) => handleSend(session.sessionId, text)}
               disabled={composerDisabled}
+              isFinalAttempt={isFinalAttempt}
+              onFinalAttemptChange={setIsFinalAttempt}
+              showFinalAttemptToggle={session.phase === "solve"}
             />
           )}
         </div>

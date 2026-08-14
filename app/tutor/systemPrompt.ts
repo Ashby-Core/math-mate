@@ -105,7 +105,7 @@ function renderTurn(turn: TurnContext): string {
       break;
     case "review":
       line =
-        "The student reached the correct answer. Give a brief, encouraging recap of what they did and the key idea — this ends the session.";
+        "The student's answer has ALREADY been confirmed correct for the WHOLE problem — this is settled, not something to double-check. Do not ask another question, do not continue scaffolding, and do not work through any remaining steps yourself, even if part of the problem looks unaddressed in the conversation so far. Just give a brief, encouraging recap of the key idea that solved it, then stop — this ends the session.";
       break;
   }
   return `## Current turn
