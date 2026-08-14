@@ -210,6 +210,32 @@ describe("judgeTurn", () => {
     });
   });
 
+  it("never reports valueMatchesFinalAnswer: true for a schema-legal but inconsistent verdict where isAttempt is false", async () => {
+    // The JSON schema only validates each field's type, not their
+    // relationship — a model could return isAttempt: false, correct: true (a
+    // clarifying question that happens to contain the right-looking value).
+    // If valueMatchesFinalAnswer leaked true here, the tutor's per-turn prompt
+    // would nudge the student to confirm a "final answer" they never gave.
+    const { anthropic } = makeAnthropic(
+      JSON.stringify({ isAttempt: false, correct: true }),
+    );
+
+    const result = await judgeTurn({
+      anthropic,
+      phase: "solve",
+      history: [],
+      studentMessage: "wait, is the answer 48 or something else?",
+      correctAnswer: "48",
+      isFinalAttempt: true,
+    });
+
+    expect(result).toEqual({
+      isAttempt: false,
+      correct: false,
+      valueMatchesFinalAnswer: false,
+    });
+  });
+
   it("does not apply the solve-only isFinalAttempt gate in gap_check", async () => {
     const { anthropic } = makeAnthropic(
       JSON.stringify({ isAttempt: true, correct: true }),

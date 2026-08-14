@@ -17,7 +17,9 @@ export type JudgeResult = {
    * isFinalAttempt gate forces `correct` false. Lets the tutor's per-turn
    * prompt react to "the value is right, but not flagged as the final
    * attempt" — see `handleTurn` and `TurnContext.valueMatchesFinalAnswer`.
-   * Undefined in gap_check, where the concept doesn't apply.
+   * Undefined in gap_check, where the concept doesn't apply. Guaranteed false
+   * whenever `isAttempt` is false, even if the model's raw response claimed
+   * otherwise — never true for a message that wasn't an attempt at all.
    */
   valueMatchesFinalAnswer?: boolean;
 };
@@ -134,7 +136,13 @@ export async function judgeTurn(args: JudgeArgs): Promise<JudgeResult> {
   try {
     const parsed = JSON.parse(text) as JudgeResult;
     const isAttempt = Boolean(parsed.isAttempt);
-    const valueMatchesFinalAnswer = Boolean(parsed.correct);
+    // The schema only validates each field's type, not their relationship, so
+    // a schema-legal but inconsistent response (isAttempt: false, correct:
+    // true) is possible from the model. Enforce "correct implies isAttempt"
+    // here, once, rather than trusting every downstream consumer of this
+    // result to re-derive it — otherwise a message that wasn't even an
+    // attempt could still read as a value match wherever this result is used.
+    const valueMatchesFinalAnswer = isAttempt && Boolean(parsed.correct);
     let correct = valueMatchesFinalAnswer;
     if (args.phase === "solve" && !args.isFinalAttempt) correct = false;
     return {
