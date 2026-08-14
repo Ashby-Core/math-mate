@@ -212,6 +212,28 @@ describe("handleTurn — solve & completion", () => {
     // Still an attempt, just not a final one — the (stubbed) MI pipeline fires
     // the same as any other non-final solve turn.
     expect(inferMisconception).toHaveBeenCalledTimes(1);
+    // The raw model verdict survives the gate on `judged`, distinct from the
+    // gated `event.correct` above — this is what lets the tutor's prompt tell
+    // the two "not done yet" cases apart (wrong vs. right-but-unflagged).
+    expect(result.judged?.valueMatchesFinalAnswer).toBe(true);
+  });
+
+  it("tells the tutor to nudge toward the toggle, not scaffold or recap, when a value matches but isFinalAttempt is not set", async () => {
+    const { deps, stream } = makeDeps({ isAttempt: true, correct: true });
+    const state = solveState();
+
+    await handleTurn(deps, {
+      profile: GAP_PROFILE,
+      problem: PROBLEM,
+      state,
+      history: [],
+      studentMessage: "7/8",
+    });
+
+    const [streamArgs] = stream.mock.calls[0] as unknown as [{ system: unknown }];
+    const system = JSON.stringify(streamArgs.system);
+    expect(system).toContain("final-answer toggle");
+    expect(system).not.toContain("ends the session");
   });
 
   it("stays in solve and fires MI on a wrong answer", async () => {

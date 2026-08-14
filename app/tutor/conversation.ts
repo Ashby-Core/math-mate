@@ -56,12 +56,16 @@ export type HandleTurnResult = {
 };
 
 /** Builds the per-turn prompt context from the (post-transition) state. */
-function turnContext(state: TutoringState): TurnContext {
+function turnContext(
+  state: TutoringState,
+  valueMatchesFinalAnswer?: boolean,
+): TurnContext {
   return {
     phase: state.phase,
     currentGap: currentGap(state),
     resolvedCount: state.gaps.filter((g) => g.resolved).length,
     totalGaps: state.gaps.length,
+    valueMatchesFinalAnswer,
   };
 }
 
@@ -198,7 +202,7 @@ export async function handleTurn(
     deps,
     profile,
     problem,
-    turnContext(newState),
+    turnContext(newState, judged?.valueMatchesFinalAnswer),
     history,
     studentMessage,
   );

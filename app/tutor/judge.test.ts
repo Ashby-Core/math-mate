@@ -46,7 +46,11 @@ describe("judgeTurn", () => {
       isFinalAttempt: true,
     });
 
-    expect(result).toEqual({ isAttempt: true, correct: true });
+    expect(result).toEqual({
+      isAttempt: true,
+      correct: true,
+      valueMatchesFinalAnswer: true,
+    });
   });
 
   it("falls back to a non-advancing verdict on malformed JSON", async () => {
@@ -152,7 +156,14 @@ describe("judgeTurn", () => {
       // overall-answer attempt.
     });
 
-    expect(result).toEqual({ isAttempt: true, correct: false });
+    expect(result).toEqual({
+      isAttempt: true,
+      correct: false,
+      // The raw model verdict survives the gate — this is exactly what the
+      // tutor's per-turn prompt uses to nudge toward the toggle instead of
+      // guessing the session is over.
+      valueMatchesFinalAnswer: true,
+    });
   });
 
   it("does not force correct: false in solve when isFinalAttempt is true", async () => {
@@ -169,7 +180,11 @@ describe("judgeTurn", () => {
       isFinalAttempt: true,
     });
 
-    expect(result).toEqual({ isAttempt: true, correct: true });
+    expect(result).toEqual({
+      isAttempt: true,
+      correct: true,
+      valueMatchesFinalAnswer: true,
+    });
   });
 
   it("still forces correct: false when isFinalAttempt is true but the value doesn't match", async () => {
@@ -188,7 +203,11 @@ describe("judgeTurn", () => {
 
     // isFinalAttempt only removes the "was this the final question" ambiguity —
     // it never overrides the model's own math-equivalence judgment.
-    expect(result).toEqual({ isAttempt: true, correct: false });
+    expect(result).toEqual({
+      isAttempt: true,
+      correct: false,
+      valueMatchesFinalAnswer: false,
+    });
   });
 
   it("does not apply the solve-only isFinalAttempt gate in gap_check", async () => {
@@ -207,6 +226,9 @@ describe("judgeTurn", () => {
     });
 
     expect(result).toEqual({ isAttempt: true, correct: true });
+    // valueMatchesFinalAnswer is a solve-only concept — gap_check must not set
+    // it, since TurnContext only reads it for the solve-phase nudge.
+    expect(result.valueMatchesFinalAnswer).toBeUndefined();
   });
 
   it("grades the gap_check phase against the named prerequisite topic", async () => {

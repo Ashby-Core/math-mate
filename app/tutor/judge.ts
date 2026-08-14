@@ -12,6 +12,14 @@ export type JudgeResult = {
   isAttempt: boolean;
   /** If an attempt, is it correct? (math equivalence, not string match) */
   correct: boolean;
+  /**
+   * solve only: the model's raw value-equivalence verdict, before the
+   * isFinalAttempt gate forces `correct` false. Lets the tutor's per-turn
+   * prompt react to "the value is right, but not flagged as the final
+   * attempt" — see `handleTurn` and `TurnContext.valueMatchesFinalAnswer`.
+   * Undefined in gap_check, where the concept doesn't apply.
+   */
+  valueMatchesFinalAnswer?: boolean;
 };
 
 export type JudgeArgs = {
@@ -126,9 +134,15 @@ export async function judgeTurn(args: JudgeArgs): Promise<JudgeResult> {
   try {
     const parsed = JSON.parse(text) as JudgeResult;
     const isAttempt = Boolean(parsed.isAttempt);
-    let correct = Boolean(parsed.correct);
+    const valueMatchesFinalAnswer = Boolean(parsed.correct);
+    let correct = valueMatchesFinalAnswer;
     if (args.phase === "solve" && !args.isFinalAttempt) correct = false;
-    return { isAttempt, correct };
+    return {
+      isAttempt,
+      correct,
+      valueMatchesFinalAnswer:
+        args.phase === "solve" ? valueMatchesFinalAnswer : undefined,
+    };
   } catch {
     return { isAttempt: false, correct: false };
   }

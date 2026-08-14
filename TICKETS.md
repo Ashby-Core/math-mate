@@ -197,6 +197,23 @@ rediscover the architecture from scratch.
   and to not ask further questions or work any remaining steps regardless of
   appearances) recapped cleanly 5/5 times against the same fixture.
 
+  **Third bug, mirror image of the second:** the reverse case — toggle left
+  *off*, and a value that objectively matches the final answer with no
+  remaining work (e.g. `f(x) = 3x + 2` at `x = 2`, answered "Is it 8?") —
+  correctly stayed in `solve` (the gate worked as designed), but the tutor's
+  reply still read like a completed recap ("Quick recap of what you did...
+  Nice work!"), since Sonnet's own sense that the problem was fully worked
+  overrode the `solve`-phase instruction, with no signal telling it otherwise.
+  `judgeTurn` already discarded the raw model verdict once the gate forced
+  `correct: false`; the fix keeps it instead. `JudgeResult` gains
+  `valueMatchesFinalAnswer?: boolean` (the model's value-equivalence judgment,
+  independent of the gate), threaded through `handleTurn` into a new
+  `TurnContext.valueMatchesFinalAnswer` field consumed by `renderTurn`'s
+  `solve` case: when true, the tutor is told to acknowledge the value and ask
+  the student to confirm via the toggle, instead of scaffolding further or
+  deciding on its own that the session is over. Verified live 5/5 in
+  `reviewReplyEval.test.ts` against the exact reported conversation.
+
   **Acceptance criteria (as implemented):**
   - `judge.test.ts` covers the deterministic gate directly (not just prompt
     content, since the gate is real code now): `correct` forced `false` when
@@ -233,6 +250,15 @@ rediscover the architecture from scratch.
     `reviewReplyEval.test.ts` is a second opt-in live-model eval, same pattern
     as `judgeEval.test.ts`, kept as a standing regression check on this
     instruction's reliability.
+  - Per the third bug: `judge.test.ts` covers `valueMatchesFinalAnswer` — set
+    to the raw model verdict in `solve` regardless of the gate, and always
+    `undefined` in `gap_check`. `systemPrompt.test.ts` covers `renderTurn`'s
+    new `solve` branch (nudge text present and the normal scaffold text absent
+    when `valueMatchesFinalAnswer` is true; unaffected when false/absent).
+    `conversation.test.ts` covers `handleTurn` threading
+    `judged?.valueMatchesFinalAnswer` into the stream call's system prompt.
+    `reviewReplyEval.test.ts` gained a second fixture for this exact scenario,
+    passing 5/5 live.
 
 - [ ] **TS-5** · P1 · M — Record wrong attempts in mastery counts
   **Overview:** Found while auditing the mastery-update path: `updateMasteryCounts`

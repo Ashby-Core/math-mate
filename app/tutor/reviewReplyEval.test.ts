@@ -43,6 +43,21 @@ const problem: Problem = {
   tops: [],
 };
 
+const functionsProfile: StudentProfile = {
+  courseName: "Functions",
+  student: { id: "u1", firstName: "John" },
+  topicMasteryScores: {},
+  weaknesses: {},
+};
+
+const functionsProblem: Problem = {
+  id: "p2" as Problem["id"],
+  questionContent: "f(x) = 3x + 2. If x = 2, what is the value of f(x)?",
+  correctAnswer: "8",
+  orderIndex: 0,
+  tops: [],
+};
+
 describe.skipIf(!ENABLED)("Sonnet review-phase reply", () => {
   loadApiKey();
   const anthropic = new Anthropic();
@@ -77,6 +92,55 @@ describe.skipIf(!ENABLED)("Sonnet review-phase reply", () => {
 
       const text = response.content.find((b) => b.type === "text")?.text;
       console.log(`--- Sonnet review-phase reply (run ${i + 1}) ---\n${text}\n---`);
+    }
+  }, 60_000);
+
+  it("nudges toward the final-answer toggle instead of writing a recap, when a value matches but isn't flagged final", async () => {
+    // The second manual repro: f(x) = 3x + 2, x = 2. The student gave the
+    // correct value ("Is it 8?") without flagging the final-answer toggle, so
+    // the state correctly stayed in "solve" — but with the OLD prompt the
+    // tutor's reply read like a completed recap anyway ("Quick recap of what
+    // you did... Nice work, John!"), even though the phase never advanced.
+    const system = buildSystemPrompt(functionsProfile, functionsProblem, {
+      phase: "solve",
+      currentGap: null,
+      resolvedCount: 0,
+      totalGaps: 0,
+      valueMatchesFinalAnswer: true,
+    });
+
+    const messages: Anthropic.MessageParam[] = [
+      { role: "user", content: "Hi! I'm ready to start." },
+      {
+        role: "assistant",
+        content:
+          "Hey John! Great to have you here — let's do this! Today we're going to work on a problem involving functions and evaluating expressions.",
+      },
+      { role: "user", content: "Yeah" },
+      {
+        role: "assistant",
+        content:
+          "Great news — you're solid on the prerequisites here, so let's dive right in! Here's the problem: f(x) = 3x + 2. If x = 2, what is the value of f(x)? Let's take it step by step. The first thing we want to do is substitute the value of x into the function. Since x = 2, what do you get when you replace x with 2 in 3x + 2?",
+      },
+      { role: "user", content: "7" },
+      {
+        role: "assistant",
+        content:
+          "Almost there! Let's double-check that. When x = 2, we get: 3(2) + 2. What is 3 × 2? And then what do you get when you add 2 to that?",
+      },
+      { role: "user", content: "Is it 8?" },
+    ];
+
+    for (let i = 0; i < 5; i++) {
+      const response = await anthropic.messages.create({
+        model: TUTOR_MODEL,
+        max_tokens: 512,
+        system,
+        messages,
+      });
+
+      const text = response.content.find((b) => b.type === "text")?.text;
+      console.log(`--- Sonnet solve-nudge reply (run ${i + 1}) ---\n${text}\n---`);
     }
   }, 60_000);
 });
