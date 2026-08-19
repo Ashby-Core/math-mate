@@ -66,6 +66,7 @@ const sessionRow = {
   gapState: {
     gaps: [{ topicId: FRACTIONS, name: "Adding Fractions", resolved: false }],
   },
+  solveAttemptRecorded: false,
 };
 
 // State handleTurn hands back (post-transition); active + still locked by default.
@@ -73,6 +74,7 @@ const activeState = {
   phase: "gap_check",
   status: "active",
   gaps: [{ topicId: FRACTIONS, name: "Adding Fractions", resolved: false }],
+  solveAttemptRecorded: false,
 };
 
 /** A fake Anthropic reply stream that yields the given text chunks as deltas. */
@@ -238,7 +240,12 @@ describe("POST /api/sessions/[id]/message — streaming turn", () => {
 
   it("deletes the transcript and reports completed when the turn finishes the session", async () => {
     m.handleTurn.mockResolvedValue({
-      state: { phase: "review", status: "completed", gaps: [] },
+      state: {
+        phase: "review",
+        status: "completed",
+        gaps: [],
+        solveAttemptRecorded: true,
+      },
       event: { type: "SOLVE_ATTEMPT", correct: true },
       judged: null,
       misconceptionFired: false,

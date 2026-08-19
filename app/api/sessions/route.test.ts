@@ -156,6 +156,7 @@ describe("POST /api/sessions — create", () => {
         phase: "gap_check",
         status: "active",
         gapState: { gaps: [] },
+        solveAttemptRecorded: false,
       });
     m.cacheGet.mockResolvedValue(null);
 
@@ -174,6 +175,7 @@ describe("POST /api/sessions — resume", () => {
     gapState: {
       gaps: [{ topicId: FRACTIONS, name: "Adding Fractions", resolved: false }],
     },
+    solveAttemptRecorded: false,
   };
 
   it("resumes from cache without calling Claude (seed stripped)", async () => {
@@ -219,6 +221,7 @@ describe("POST /api/sessions — resume", () => {
         gapState: {
           gaps: [{ topicId: FRACTIONS, name: "Adding Fractions", resolved: true }],
         },
+        solveAttemptRecorded: false,
       });
       m.cacheGet.mockResolvedValue(null);
 

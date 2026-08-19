@@ -117,7 +117,7 @@ describe("handleTurn — intro", () => {
 });
 
 describe("handleTurn — gap_check", () => {
-  it("resolves the gap and unlocks the problem on a correct answer", async () => {
+  it("resolves the gap and unlocks the problem on a correct answer, recording a correct attempt", async () => {
     const { deps, inferMisconception } = makeDeps({ isAttempt: true, correct: true });
     const result = await handleTurn(deps, {
       profile: GAP_PROFILE,
@@ -130,9 +130,12 @@ describe("handleTurn — gap_check", () => {
     expect(result.event).toEqual({ type: "GAP_ATTEMPT", correct: true });
     expect(result.state.phase).toBe("solve"); // single gap resolved
     expect(inferMisconception).not.toHaveBeenCalled();
+    expect(result.masteryUpdated).toBe(true);
+    expect(mockUpdate).toHaveBeenCalledTimes(1);
+    expect(mockUpdate).toHaveBeenCalledWith({}, "student-1", FRACTIONS, true);
   });
 
-  it("stays in gap_check and fires MI on a wrong answer", async () => {
+  it("stays in gap_check, fires MI, and records a wrong attempt (attempted without correct)", async () => {
     const { deps, inferMisconception } = makeDeps({ isAttempt: true, correct: false });
     const state = gapCheckState();
     const result = await handleTurn(deps, {
@@ -143,15 +146,18 @@ describe("handleTurn — gap_check", () => {
       studentMessage: "1/4",
     });
 
-    expect(result.state).toBe(state); // no-op
+    expect(result.state).toBe(state); // no-op (phase unchanged)
     expect(result.misconceptionFired).toBe(true);
     expect(inferMisconception).toHaveBeenCalledTimes(1);
     expect(inferMisconception).toHaveBeenCalledWith(
       expect.objectContaining({ topicId: FRACTIONS, studentAnswer: "1/4" }),
     );
+    expect(result.masteryUpdated).toBe(true);
+    expect(mockUpdate).toHaveBeenCalledTimes(1);
+    expect(mockUpdate).toHaveBeenCalledWith({}, "student-1", FRACTIONS, false);
   });
 
-  it("treats a clarifying question as not-an-attempt (no event, no MI)", async () => {
+  it("treats a clarifying question as not-an-attempt (no event, no MI, no mastery write)", async () => {
     const { deps, inferMisconception } = makeDeps({ isAttempt: false, correct: false });
     const result = await handleTurn(deps, {
       profile: GAP_PROFILE,
@@ -165,6 +171,34 @@ describe("handleTurn — gap_check", () => {
     expect(result.judged).toEqual({ isAttempt: false, correct: false });
     expect(result.state.phase).toBe("gap_check");
     expect(inferMisconception).not.toHaveBeenCalled();
+    expect(result.masteryUpdated).toBe(false);
+    expect(mockUpdate).not.toHaveBeenCalled();
+  });
+
+  it("records multiple attempts on the same gap across tries before it resolves", async () => {
+    const { deps: wrongDeps } = makeDeps({ isAttempt: true, correct: false });
+    const afterWrong = await handleTurn(wrongDeps, {
+      profile: GAP_PROFILE,
+      problem: PROBLEM,
+      state: gapCheckState(),
+      history: [],
+      studentMessage: "1/4",
+    });
+    expect(afterWrong.state.phase).toBe("gap_check"); // still open
+
+    const { deps: correctDeps } = makeDeps({ isAttempt: true, correct: true });
+    const afterCorrect = await handleTurn(correctDeps, {
+      profile: GAP_PROFILE,
+      problem: PROBLEM,
+      state: afterWrong.state,
+      history: [],
+      studentMessage: "3/8",
+    });
+    expect(afterCorrect.state.phase).toBe("solve"); // now resolved
+
+    expect(mockUpdate).toHaveBeenCalledTimes(2);
+    expect(mockUpdate).toHaveBeenNthCalledWith(1, {}, "student-1", FRACTIONS, false);
+    expect(mockUpdate).toHaveBeenNthCalledWith(2, {}, "student-1", FRACTIONS, true);
   });
 });
 
@@ -183,13 +217,14 @@ describe("handleTurn — solve & completion", () => {
 
     expect(result.event).toEqual({ type: "SOLVE_ATTEMPT", correct: true });
     expect(result.state.status).toBe("completed");
+    expect(result.state.solveAttemptRecorded).toBe(true);
     expect(result.masteryUpdated).toBe(true);
     expect(mockUpdate).toHaveBeenCalledTimes(1);
     expect(mockUpdate).toHaveBeenCalledWith({}, "student-1", FRACTIONS, true);
     expect(inferMisconception).not.toHaveBeenCalled();
   });
 
-  it("does not complete on a matching value when isFinalAttempt is not set", async () => {
+  it("does not complete on a matching value when isFinalAttempt is not set, but still records the first attempt", async () => {
     // Reproduces the reported bug at the conversation-handler level: the model
     // itself judges the value as correct, but without an explicit
     // isFinalAttempt signal that must never be treated as finishing the
@@ -206,9 +241,15 @@ describe("handleTurn — solve & completion", () => {
     });
 
     expect(result.event).toEqual({ type: "SOLVE_ATTEMPT", correct: false });
-    expect(result.state).toBe(state);
-    expect(result.masteryUpdated).toBe(false);
-    expect(mockUpdate).not.toHaveBeenCalled();
+    expect(result.state).not.toBe(state); // solveAttemptRecorded flipped even though phase didn't change
+    expect(result.state.phase).toBe("solve");
+    expect(result.state.solveAttemptRecorded).toBe(true);
+    // This is still the session's first judged SOLVE_ATTEMPT, so TS-5's
+    // write-once rule fires with the gated (false) correctness — not the
+    // model's raw (coincidentally-matching) verdict.
+    expect(result.masteryUpdated).toBe(true);
+    expect(mockUpdate).toHaveBeenCalledTimes(1);
+    expect(mockUpdate).toHaveBeenCalledWith({}, "student-1", FRACTIONS, false);
     // Still an attempt, just not a final one — the (stubbed) MI pipeline fires
     // the same as any other non-final solve turn.
     expect(inferMisconception).toHaveBeenCalledTimes(1);
@@ -236,7 +277,7 @@ describe("handleTurn — solve & completion", () => {
     expect(system).not.toContain("ends the session");
   });
 
-  it("stays in solve and fires MI on a wrong answer", async () => {
+  it("stays in solve, fires MI, and records the first (wrong) attempt immediately", async () => {
     const { deps, inferMisconception } = makeDeps({ isAttempt: true, correct: false });
     const state = solveState();
     const result = await handleTurn(deps, {
@@ -248,10 +289,56 @@ describe("handleTurn — solve & completion", () => {
       isFinalAttempt: true,
     });
 
-    expect(result.state).toBe(state);
+    expect(result.state.phase).toBe("solve"); // stays in solve
+    expect(result.state.solveAttemptRecorded).toBe(true);
     expect(result.misconceptionFired).toBe(true);
-    expect(result.masteryUpdated).toBe(false);
-    expect(mockUpdate).not.toHaveBeenCalled();
+    expect(inferMisconception).toHaveBeenCalledTimes(1);
+    // Not deferred to eventual completion — a wrong first attempt still
+    // leaves a real mastery data point even if the session is abandoned here.
+    expect(result.masteryUpdated).toBe(true);
+    expect(mockUpdate).toHaveBeenCalledTimes(1);
+    expect(mockUpdate).toHaveBeenCalledWith({}, "student-1", FRACTIONS, false);
+  });
+
+  it("never writes problem.tops masteries again after the first solve attempt in a session", async () => {
+    const { deps: firstDeps } = makeDeps({ isAttempt: true, correct: false });
+    const afterFirst = await handleTurn(firstDeps, {
+      profile: GAP_PROFILE,
+      problem: PROBLEM,
+      state: solveState(),
+      history: [],
+      studentMessage: "1",
+      isFinalAttempt: true,
+    });
+    expect(mockUpdate).toHaveBeenCalledTimes(1);
+
+    // A second wrong attempt in the same session...
+    const { deps: secondDeps } = makeDeps({ isAttempt: true, correct: false });
+    const afterSecond = await handleTurn(secondDeps, {
+      profile: GAP_PROFILE,
+      problem: PROBLEM,
+      state: afterFirst.state,
+      history: [],
+      studentMessage: "2",
+      isFinalAttempt: true,
+    });
+    expect(afterSecond.masteryUpdated).toBe(false);
+    expect(mockUpdate).toHaveBeenCalledTimes(1); // still just the first write
+
+    // ...and a third, this time correct/final, completes the session but
+    // still doesn't write to problem.tops again.
+    const { deps: thirdDeps } = makeDeps({ isAttempt: true, correct: true });
+    const afterThird = await handleTurn(thirdDeps, {
+      profile: GAP_PROFILE,
+      problem: PROBLEM,
+      state: afterSecond.state,
+      history: [],
+      studentMessage: "7/8",
+      isFinalAttempt: true,
+    });
+    expect(afterThird.state.status).toBe("completed");
+    expect(afterThird.masteryUpdated).toBe(false);
+    expect(mockUpdate).toHaveBeenCalledTimes(1); // unchanged
   });
 
   it("dedupes mastery writes across duplicate problem topics", async () => {
@@ -281,6 +368,7 @@ describe("handleTurn — solve & completion", () => {
       phase: "review" as const,
       status: "completed" as const,
       gaps: [{ topicId: DIVISION, name: "x", resolved: true }],
+      solveAttemptRecorded: true,
     };
     const result = await handleTurn(deps, {
       profile: GAP_PROFILE,
