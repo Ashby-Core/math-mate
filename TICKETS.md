@@ -260,7 +260,8 @@ rediscover the architecture from scratch.
     `reviewReplyEval.test.ts` gained a second fixture for this exact scenario,
     passing 5/5 live.
 
-- [ ] **TS-5** · P1 · M — Record wrong attempts in mastery counts
+- [x] **TS-5** · P1 · M — Record wrong attempts in mastery counts
+  
   **Overview:** Found while auditing the mastery-update path: `updateMasteryCounts`
   (`app/queries/masteries.ts:69`) is only ever called from one place —
   `conversation.ts:183`, on the turn `isComplete(newState)` flips `false`→`true` —
@@ -272,6 +273,7 @@ rediscover the architecture from scratch.
   problem reads as `mastery: 1.0` forever, no matter how many wrong tries it took —
   the exact "struggled but eventually got it" signal mastery is supposed to
   capture never reaches the DB.
+  
   **Design decision (resolved in conversation):** the two judged phases need
   different granularity, because `correct` means different things in each:
   - `gap_check`: each `GAP_ATTEMPT` is graded against whatever question the tutor
@@ -295,11 +297,24 @@ rediscover the architecture from scratch.
     (A correct-but-premature judge verdict caused by a coincidental value match
     mid-scaffold is a separate, already-tracked risk — see **TS-4** — not
     something this ticket needs to re-solve.)
+
+  **Implementation note (deviates from the criteria below as originally
+  written):** `solveAttemptRecorded` is persisted as its own
+  `tutoring_sessions.solve_attempt_recorded` column (migration
+  `0004_solve_attempt_recorded.sql`), not nested inside the `gap_state` jsonb.
+  Decided in review: `gap_state`'s schemaless design is meant for incidental
+  gap-probe bookkeeping, not first-class session-lifecycle state — `phase` and
+  `status` already get dedicated columns for exactly that reason, and this
+  flag is the same kind of thing. The cost is a small migration plus updating
+  `app/queries/sessions.ts`'s select/insert/update column lists; `gap_state`
+  itself is untouched and remains available for future incidental additions.
+
   **Acceptance criteria:**
-  - `TutoringState` gains `solveAttemptRecorded: boolean` (default `false`),
-    persisted alongside `gaps` in the `gap_state` jsonb (`{ gaps,
-    solveAttemptRecorded }`) — `fromPersisted` normalizes a missing/legacy value
-    to `false`, same pattern already used for a missing `gaps` array.
+  - `TutoringState` gains `solveAttemptRecorded: boolean` (default `false`).
+    Persisted as its own `solve_attempt_recorded` column (see implementation
+    note above, not nested in `gap_state`) — `fromPersisted` normalizes a
+    missing/legacy value to `false`, same pattern already used for a missing
+    `gaps` array.
   - `handleTurn` calls `updateMasteryCounts` for `currentGap(state).topicId` on
     *every* judged `GAP_ATTEMPT` (correct or not).
   - `handleTurn` calls `updateMasteryCounts` once per topic in `problem.tops` with
@@ -324,6 +339,13 @@ rediscover the architecture from scratch.
     `SOLVE_ATTEMPT` in the same session never fires another `problem.tops`
     write, regardless of its correctness. `stateMachine.test.ts` covers the new
     field's persistence round-trip and its missing-field default.
+  - Manually verified end-to-end against a live gap + solve session (real
+    Supabase project, not just mocks): a wrong-then-correct gap attempt
+    produced two distinct `updateMasteryCounts` writes on the gap topic; the
+    first solve attempt (wrong, final-answer toggle on) wrote once to every
+    `problem.tops` topic including the already-resolved gap topic (confirming
+    the "two data points" note above in real data); a second wrong attempt and
+    the eventual correct/completing attempt both produced zero further writes.
 
 ## Milestone 3 — Wire it to HTTP
 *Exit: full session drivable via curl/Postman.*
