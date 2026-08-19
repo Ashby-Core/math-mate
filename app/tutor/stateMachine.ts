@@ -28,6 +28,12 @@ export type TutoringState = {
   phase: Phase;
   status: SessionStatus;
   gaps: GapEntry[]; // in probe order (problem.tops order, deduped)
+  /**
+   * Whether this session has already recorded its one live first-solve-attempt
+   * mastery write (see TS-5). Gap-check attempts write on every turn regardless;
+   * this flag only guards the once-per-session `problem.tops` write.
+   */
+  solveAttemptRecorded: boolean;
 };
 
 /**
@@ -70,6 +76,7 @@ export function initTutoringState(
     phase: "intro",
     status: "active",
     gaps: computeGaps(profile, problem),
+    solveAttemptRecorded: false,
   };
 }
 
@@ -148,13 +155,15 @@ export function canApply(state: TutoringState, event: TutoringEvent): boolean {
 
 // --- Persistence mapping (pure object shaping; no DB code) -----------------
 // Splits the state across the row's dedicated columns so each fact is stored
-// once: `phase` and `status` are their own columns, the rest goes in the
-// `gap_state` jsonb (as an object, so it stays forward-extensible).
+// once: `phase`, `status`, and `solveAttemptRecorded` are first-class session
+// lifecycle columns; only `gaps` (probe progress) goes in the schemaless
+// `gap_state` jsonb, which stays forward-extensible for that kind of detail.
 
 export type PersistedTutoringState = {
   phase: Phase;
   status: SessionStatus;
   gapState: { gaps: GapEntry[] };
+  solveAttemptRecorded: boolean;
 };
 
 export function toPersisted(state: TutoringState): PersistedTutoringState {
@@ -162,14 +171,20 @@ export function toPersisted(state: TutoringState): PersistedTutoringState {
     phase: state.phase,
     status: state.status,
     gapState: { gaps: state.gaps },
+    solveAttemptRecorded: state.solveAttemptRecorded,
   };
 }
 
-/** Rehydrates state from a persisted row, normalizing a missing/empty jsonb. */
+/**
+ * Rehydrates state from a persisted row, normalizing a missing/empty jsonb
+ * and a missing/legacy `solveAttemptRecorded` (pre-TS-5 rows) to their
+ * empty/false defaults.
+ */
 export function fromPersisted(p: PersistedTutoringState): TutoringState {
   return {
     phase: p.phase,
     status: p.status,
     gaps: p.gapState?.gaps ?? [],
+    solveAttemptRecorded: p.solveAttemptRecorded ?? false,
   };
 }

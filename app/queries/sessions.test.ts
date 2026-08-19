@@ -18,7 +18,13 @@ describe("getActiveSession", () => {
   it("returns the row reduced to its persisted state", async () => {
     const { client } = fakeSupabase({
       data: [
-        { id: "s1", phase: "gap_check", status: "active", gap_state: { gaps } },
+        {
+          id: "s1",
+          phase: "gap_check",
+          status: "active",
+          gap_state: { gaps },
+          solve_attempt_recorded: true,
+        },
       ],
       error: null,
     });
@@ -27,6 +33,7 @@ describe("getActiveSession", () => {
       phase: "gap_check",
       status: "active",
       gapState: { gaps },
+      solveAttemptRecorded: true,
     });
   });
 
@@ -37,6 +44,15 @@ describe("getActiveSession", () => {
     });
     const row = await getActiveSession(client, "u1", "p1");
     expect(row?.gapState).toEqual({ gaps: [] });
+  });
+
+  it("defaults solveAttemptRecorded to false when the column is missing (legacy row)", async () => {
+    const { client } = fakeSupabase({
+      data: [{ id: "s1", phase: "intro", status: "active", gap_state: null }],
+      error: null,
+    });
+    const row = await getActiveSession(client, "u1", "p1");
+    expect(row?.solveAttemptRecorded).toBe(false);
   });
 
   it("returns null when there is no active row", async () => {
@@ -63,6 +79,7 @@ describe("getSessionById", () => {
         phase: "solve",
         status: "active",
         gap_state: { gaps },
+        solve_attempt_recorded: true,
       },
       error: null,
     });
@@ -73,6 +90,7 @@ describe("getSessionById", () => {
       phase: "solve",
       status: "active",
       gapState: { gaps },
+      solveAttemptRecorded: true,
     });
   });
 
@@ -91,7 +109,12 @@ describe("getSessionById", () => {
 });
 
 describe("createSession", () => {
-  const state: TutoringState = { phase: "intro", status: "active", gaps };
+  const state: TutoringState = {
+    phase: "intro",
+    status: "active",
+    gaps,
+    solveAttemptRecorded: false,
+  };
 
   it("inserts the persisted state and returns the new id", async () => {
     const { client, chains } = fakeSupabase({ data: { id: "s-new" }, error: null });
@@ -108,6 +131,7 @@ describe("createSession", () => {
         phase: "intro",
         status: "active",
         gap_state: { gaps },
+        solve_attempt_recorded: false,
       }),
     );
   });
@@ -134,7 +158,12 @@ describe("createSession", () => {
 });
 
 describe("updateSessionState", () => {
-  const state: TutoringState = { phase: "review", status: "completed", gaps };
+  const state: TutoringState = {
+    phase: "review",
+    status: "completed",
+    gaps,
+    solveAttemptRecorded: true,
+  };
 
   it("persists the latest state and returns true", async () => {
     const { client, chains } = fakeSupabase({ error: null });
@@ -144,6 +173,7 @@ describe("updateSessionState", () => {
         phase: "review",
         status: "completed",
         gap_state: { gaps },
+        solve_attempt_recorded: true,
       }),
     );
     expect(chains[0].eq).toHaveBeenCalledWith("id", "s1");

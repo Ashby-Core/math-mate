@@ -37,7 +37,7 @@ export async function getActiveSession(
 ): Promise<SessionRow | null> {
   const { data, error } = await supabase
     .from("tutoring_sessions")
-    .select("id, phase, status, gap_state")
+    .select("id, phase, status, gap_state, solve_attempt_recorded")
     .eq("student_id", studentId)
     .eq("problem_id", problemId)
     .eq("status", "active")
@@ -57,6 +57,7 @@ export async function getActiveSession(
     phase: row.phase as Phase,
     status: row.status as SessionStatus,
     gapState: (row.gap_state ?? { gaps: [] }) as { gaps: GapEntry[] },
+    solveAttemptRecorded: row.solve_attempt_recorded ?? false,
   };
 }
 
@@ -73,7 +74,9 @@ export async function getSessionById(
 ): Promise<OwnedSessionRow | null> {
   const { data, error } = await supabase
     .from("tutoring_sessions")
-    .select("id, student_id, problem_id, phase, status, gap_state")
+    .select(
+      "id, student_id, problem_id, phase, status, gap_state, solve_attempt_recorded",
+    )
     .eq("id", sessionId)
     .maybeSingle();
 
@@ -90,6 +93,7 @@ export async function getSessionById(
     phase: data.phase as Phase,
     status: data.status as SessionStatus,
     gapState: (data.gap_state ?? { gaps: [] }) as { gaps: GapEntry[] },
+    solveAttemptRecorded: data.solve_attempt_recorded ?? false,
   };
 }
 
@@ -111,6 +115,7 @@ export async function createSession(
       phase: persisted.phase,
       status: persisted.status,
       gap_state: persisted.gapState,
+      solve_attempt_recorded: persisted.solveAttemptRecorded,
     })
     .select("id")
     .single();
@@ -185,6 +190,7 @@ export async function updateSessionState(
       phase: persisted.phase,
       status: persisted.status,
       gap_state: persisted.gapState,
+      solve_attempt_recorded: persisted.solveAttemptRecorded,
       updated_at: new Date().toISOString(),
     })
     .eq("id", sessionId);

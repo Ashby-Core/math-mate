@@ -11,6 +11,7 @@ import {
   isComplete,
   isProblemUnlocked,
   toPersisted,
+  type PersistedTutoringState,
   type TutoringState,
 } from "./stateMachine";
 
@@ -177,6 +178,7 @@ describe("advance — no-op behavior", () => {
       phase: "review",
       status: "completed",
       gaps: [],
+      solveAttemptRecorded: true,
     };
     expect(advance(completed, { type: "ADVANCE" })).toBe(completed);
     expect(advance(completed, { type: "SOLVE_ATTEMPT", correct: true })).toBe(
@@ -207,6 +209,7 @@ describe("persistence mapping", () => {
       phase: "gap_check",
       status: "active",
       gaps: [{ topicId: FRACTIONS, name: "Adding Fractions", resolved: false }],
+      solveAttemptRecorded: true,
     };
     expect(fromPersisted(toPersisted(state))).toEqual(state);
   });
@@ -217,7 +220,18 @@ describe("persistence mapping", () => {
       status: "active",
       // simulate an empty/legacy jsonb where gaps is absent
       gapState: {} as { gaps: [] },
+      solveAttemptRecorded: false,
     });
     expect(rehydrated.gaps).toEqual([]);
+  });
+
+  it("normalizes a persisted row with a missing solveAttemptRecorded (pre-TS-5 row)", () => {
+    const rehydrated = fromPersisted({
+      phase: "solve",
+      status: "active",
+      gapState: { gaps: [] },
+      solveAttemptRecorded: undefined,
+    } as unknown as PersistedTutoringState);
+    expect(rehydrated.solveAttemptRecorded).toBe(false);
   });
 });
