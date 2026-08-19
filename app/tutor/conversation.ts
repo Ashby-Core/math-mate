@@ -6,18 +6,12 @@ import { inferMisconception, InferMisconception } from "@/app/queries/claude";
 import { TUTOR_MODEL } from "./constants";
 import { buildSystemPrompt, TurnContext } from "./systemPrompt";
 import { judgeTurn, JudgeResult } from "./judge";
-import {
-  advance,
-  currentGap,
-  isComplete,
-  TutoringEvent,
-  TutoringState,
-} from "./stateMachine";
+import { advance, currentGap, TutoringEvent, TutoringState } from "./stateMachine";
 
 // The per-turn conversation handler. Ties the system prompt and
 // the phase state machine to live Claude calls: judge the student's
 // message, advance the phase deterministically, fire the (stubbed) misconception
-// pipeline on wrong answers, update mastery on completion, and stream the Sonnet
+// pipeline on wrong answers, write live mastery updates, and stream the Sonnet
 // reply. Dependencies are injected so the handler is unit-testable with mocks.
 
 /** Bounded so a non-streaming caller can't hit an HTTP timeout; a cost guard. */
@@ -49,7 +43,7 @@ export type HandleTurnResult = {
   judged: JudgeResult | null;
   /** Whether the MI pipeline was invoked (on a wrong answer). */
   misconceptionFired: boolean;
-  /** Whether the completion mastery update ran this turn. */
+  /** Whether a mastery write ran this turn (a gap attempt, or the session's first solve attempt). */
   masteryUpdated: boolean;
   /** The streamed tutor reply (also exposes `.finalMessage()`). */
   stream: ReplyStream;
@@ -184,16 +178,36 @@ export async function handleTurn(
     misconceptionFired = true;
   }
 
+  // Mastery writes are live per-turn, not deferred to completion (TS-5):
+  // - gap_check: every judged GAP_ATTEMPT is a real single-topic data point,
+  //   correct or not — the tutor's follow-up question is still meaningful.
+  // - solve: SOLVE_ATTEMPT is graded against the problem's fixed final answer
+  //   regardless of what the tutor actually asked, so a correct intermediate
+  //   scaffolding step is guaranteed `correct: false` by design — that's judge
+  //   noise, not a real gap. Write once, on the first judged attempt of the
+  //   session (whatever its correctness), then suppress further writes.
   let masteryUpdated = false;
-  if (isComplete(newState) && !isComplete(state)) {
+  if (event?.type === "GAP_ATTEMPT") {
+    const topicId = currentGap(state)?.topicId;
+    if (topicId) {
+      await updateMasteryCounts(
+        deps.supabase,
+        profile.student.id,
+        topicId,
+        event.correct,
+      );
+      masteryUpdated = true;
+    }
+  } else if (event?.type === "SOLVE_ATTEMPT" && !state.solveAttemptRecorded) {
     for (const topicId of new Set(problem.tops)) {
       await updateMasteryCounts(
         deps.supabase,
         profile.student.id,
         topicId,
-        true,
+        event.correct,
       );
     }
+    newState = { ...newState, solveAttemptRecorded: true };
     masteryUpdated = true;
   }
 
