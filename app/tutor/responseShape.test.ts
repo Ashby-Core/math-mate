@@ -40,12 +40,23 @@ const gaps = [
   { topicId: FRACTIONS, name: "Adding Fractions", resolved: false },
   { topicId: DIVISION, name: "Long Division", resolved: false },
 ];
-const intro: TutoringState = { phase: "intro", status: "active", gaps };
-const gapCheck: TutoringState = { phase: "gap_check", status: "active", gaps };
+const intro: TutoringState = {
+  phase: "intro",
+  status: "active",
+  gaps,
+  solveAttemptRecorded: false,
+};
+const gapCheck: TutoringState = {
+  phase: "gap_check",
+  status: "active",
+  gaps,
+  solveAttemptRecorded: false,
+};
 const solve: TutoringState = {
   phase: "solve",
   status: "active",
   gaps: gaps.map((g) => ({ ...g, resolved: true })),
+  solveAttemptRecorded: false,
 };
 const review: TutoringState = { ...solve, phase: "review" };
 
