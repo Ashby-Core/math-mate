@@ -1,8 +1,12 @@
 import { readFileSync } from "node:fs";
+import type { UUID } from "crypto";
 import Anthropic from "@anthropic-ai/sdk";
-import { describe, it } from "vitest";
-import { buildSystemPrompt } from "./systemPrompt";
+import { describe, expect, it } from "vitest";
+import { buildSystemPrompt, TurnContext } from "./systemPrompt";
 import { TUTOR_MODEL } from "./constants";
+import { judgeTurn } from "./judge";
+import { SESSION_SEED_MESSAGE } from "./conversation";
+import { advance, currentGap, initTutoringState, TutoringState } from "./stateMachine";
 import type { Problem, StudentProfile } from "@/app/types";
 
 // Diagnostic for a report from manual testing: after jumping ahead with
@@ -143,4 +147,168 @@ describe.skipIf(!ENABLED)("Sonnet review-phase reply", () => {
       console.log(`--- Sonnet solve-nudge reply (run ${i + 1}) ---\n${text}\n---`);
     }
   }, 60_000);
+
+  it("recaps a correct final answer as correct, built from a full real session — issue #33", async () => {
+    // Unlike the fixtures above (a hand-written guess at what a transcript
+    // looks like), this drives an actual session turn by turn — intro, a
+    // wrong gap-check answer, a correct one, two wrong solve attempts, then
+    // the correct final answer — using the same judge -> advance ->
+    // buildSystemPrompt sequence conversation.ts's handleTurn uses (inlined
+    // here rather than calling handleTurn itself, since its mastery/
+    // misconception side effects are irrelevant to this eval and would only
+    // require mocking Supabase for no benefit). This gives the final
+    // review-phase call a real, live-model-authored transcript to react to,
+    // which is what actually reproduces issue #33 (Sonnet re-grading the
+    // final answer against the tutor's last scaffold sub-question and
+    // calling it wrong) instead of a fabrication that only looks plausible.
+    const SUBSTITUTION = "44444444-4444-4444-4444-444444444444" as UUID;
+
+    const functionsProfileFull: StudentProfile = {
+      courseName: "Functions",
+      student: { id: "u3", firstName: "Sam" },
+      topicMasteryScores: {
+        [SUBSTITUTION]: { name: "Substituting into Expressions", mastery: 0.3 },
+      },
+      weaknesses: {},
+    };
+
+    const functionsProblemFull: Problem = {
+      id: "p3" as Problem["id"],
+      questionContent: "f(x) = 3x + 2. If x = 2, what is the value of f(x)?",
+      correctAnswer: "8",
+      orderIndex: 0,
+      tops: [SUBSTITUTION],
+    };
+
+    function turnContextFor(
+      state: TutoringState,
+      valueMatchesFinalAnswer?: boolean,
+    ): TurnContext {
+      return {
+        phase: state.phase,
+        currentGap: currentGap(state),
+        resolvedCount: state.gaps.filter((g) => g.resolved).length,
+        totalGaps: state.gaps.length,
+        valueMatchesFinalAnswer,
+      };
+    }
+
+    async function tutorReply(
+      state: TutoringState,
+      history: Anthropic.MessageParam[],
+      studentMessage: string,
+      valueMatchesFinalAnswer?: boolean,
+    ): Promise<string> {
+      const system = buildSystemPrompt(
+        functionsProfileFull,
+        functionsProblemFull,
+        turnContextFor(state, valueMatchesFinalAnswer),
+      );
+      const response = await anthropic.messages.create({
+        model: TUTOR_MODEL,
+        max_tokens: 512,
+        system,
+        messages: [...history, { role: "user", content: studentMessage }],
+      });
+      return response.content.find((b) => b.type === "text")?.text ?? "";
+    }
+
+    let state = initTutoringState(functionsProfileFull, functionsProblemFull); // intro
+    let history: Anthropic.MessageParam[] = [];
+
+    // Opening greeting against the seed message, mirroring openSession.
+    const greeting = await tutorReply(state, [], SESSION_SEED_MESSAGE);
+    history = [
+      { role: "user", content: SESSION_SEED_MESSAGE },
+      { role: "assistant", content: greeting },
+    ];
+
+    // Intro turn: any message advances straight to gap_check, no judging.
+    state = advance(state, { type: "ADVANCE" });
+    expect(state.phase).toBe("gap_check");
+    let studentMessage = "Hi, I'm ready!";
+    let reply = await tutorReply(state, history, studentMessage);
+    history.push({ role: "user", content: studentMessage }, { role: "assistant", content: reply });
+
+    // Gap check, wrong answer. The tutor picks its own concrete example on
+    // the fly (e.g. "what's 4(2) + 3?"), so a live judge call here would be
+    // grading our scripted wording against an unpredictable question — not
+    // what this eval is about. The correctness of *this* answer is known by
+    // construction, so the transition is forced directly; only the final
+    // solve attempt below needs a real, asserted judge verdict, since that's
+    // the one that actually gates entry into the review phase in production.
+    studentMessage =
+      "Substitution means replacing the whole expression with the value of x, so f(x) just becomes 2.";
+    state = advance(state, { type: "GAP_ATTEMPT", correct: false });
+    expect(state.phase).toBe("gap_check"); // stays open, tutor nudges
+    reply = await tutorReply(state, history, studentMessage);
+    history.push({ role: "user", content: studentMessage }, { role: "assistant", content: reply });
+
+    // Gap check, correct answer.
+    studentMessage =
+      "Substitution means replacing every x in the expression with its given value, so 3x + 2 becomes 3(2) + 2 before you simplify.";
+    state = advance(state, { type: "GAP_ATTEMPT", correct: true });
+    expect(state.phase).toBe("solve"); // gap resolved, problem unlocked
+    reply = await tutorReply(state, history, studentMessage);
+    history.push({ role: "user", content: studentMessage }, { role: "assistant", content: reply });
+
+    // Solve, first attempt — wrong, final-answer toggle ON.
+    studentMessage = "10";
+    state = advance(state, { type: "SOLVE_ATTEMPT", correct: false });
+    expect(state.phase).toBe("solve");
+    reply = await tutorReply(state, history, studentMessage);
+    history.push({ role: "user", content: studentMessage }, { role: "assistant", content: reply });
+
+    // Solve, second attempt — wrong again, toggle ON.
+    studentMessage = "7";
+    state = advance(state, { type: "SOLVE_ATTEMPT", correct: false });
+    expect(state.phase).toBe("solve");
+    reply = await tutorReply(state, history, studentMessage);
+    history.push({ role: "user", content: studentMessage }, { role: "assistant", content: reply });
+
+    // Solve, third attempt — the correct final answer, toggle ON. This is the
+    // turn that collapses solve -> review -> completed in one step (same as
+    // handleTurn), and the review-phase reply generated for it is exactly
+    // what issue #33 reported as sometimes grading the answer WRONG against
+    // whatever narrower sub-question the tutor's last scaffold message asked.
+    // Unlike the setup turns above, this judge call IS real and asserted:
+    // it's the one that actually decides completion in production.
+    studentMessage = "8";
+    const judged = await judgeTurn({
+      anthropic,
+      phase: "solve",
+      history,
+      studentMessage,
+      correctAnswer: functionsProblemFull.correctAnswer,
+      isFinalAttempt: true,
+    });
+    expect(judged.correct).toBe(true);
+    state = advance(state, { type: "SOLVE_ATTEMPT", correct: true });
+    expect(state.phase).toBe("review");
+    state = advance(state, { type: "ADVANCE" });
+    expect(state.status).toBe("completed");
+
+    const finalMessages: Anthropic.MessageParam[] = [
+      ...history,
+      { role: "user", content: studentMessage },
+    ];
+    const system = buildSystemPrompt(
+      functionsProfileFull,
+      functionsProblemFull,
+      turnContextFor(state),
+    );
+
+    for (let i = 0; i < 5; i++) {
+      const response = await anthropic.messages.create({
+        model: TUTOR_MODEL,
+        max_tokens: 512,
+        system,
+        messages: finalMessages,
+      });
+      const text = response.content.find((b) => b.type === "text")?.text;
+      console.log(
+        `--- Sonnet review-phase recap, full-session issue #33 fixture (run ${i + 1}) ---\n${text}\n---`,
+      );
+    }
+  }, 180_000);
 });
