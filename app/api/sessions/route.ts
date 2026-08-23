@@ -4,7 +4,11 @@ import { requireUserApi } from "@/app/queries/auth";
 import { getProblemById } from "@/app/queries/problems";
 import { isStudentEnrolled } from "@/app/queries/enrollments";
 import { buildProfile } from "@/app/queries/profile";
-import { createSession, getActiveSession } from "@/app/queries/sessions";
+import {
+  createSession,
+  getActiveSession,
+  getCompletedSession,
+} from "@/app/queries/sessions";
 import { getAnthropic } from "@/app/tutor/anthropic";
 import { openSession, SESSION_SEED_MESSAGE } from "@/app/tutor/conversation";
 import { fromPersisted, initTutoringState } from "@/app/tutor/stateMachine";
@@ -68,6 +72,31 @@ export async function POST(req: NextRequest) {
       const history = (await historyCache.get(existing.id)) ?? [];
       return NextResponse.json(
         toSessionResponse({ sessionId: existing.id, state, profile, problem, history }),
+        { status: 200 },
+      );
+    }
+
+    // Resume a completed session for review (API-3): no active row, but the
+    // student already finished this problem. Serve the durable state back with
+    // no new Claude call. The transcript is gone by design (it's deleted on
+    // completion), so the display history is just the one completion-summary
+    // reply persisted at that time — never an empty-looking "no messages yet"
+    // for a problem the student actually solved, and never a fabricated user
+    // turn the server never accepted (preserving FE-2's guarantee).
+    const completedSession = await getCompletedSession(supabase, user.id, problemId);
+    if (completedSession) {
+      const state = fromPersisted(completedSession);
+      const history: Anthropic.MessageParam[] = completedSession.completionSummary
+        ? [{ role: "assistant", content: completedSession.completionSummary }]
+        : [];
+      return NextResponse.json(
+        toSessionResponse({
+          sessionId: completedSession.id,
+          state,
+          profile,
+          problem,
+          history,
+        }),
         { status: 200 },
       );
     }
