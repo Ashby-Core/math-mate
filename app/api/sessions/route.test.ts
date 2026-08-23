@@ -10,7 +10,7 @@ const m = vi.hoisted(() => ({
   isStudentEnrolled: vi.fn(),
   buildProfile: vi.fn(),
   getActiveSession: vi.fn(),
-  getCompletedSession: vi.fn(),
+  getResumableSession: vi.fn(),
   createSession: vi.fn(),
   openSession: vi.fn(),
   getAnthropic: vi.fn(() => ({})),
@@ -26,7 +26,7 @@ vi.mock("@/app/queries/enrollments", () => ({
 vi.mock("@/app/queries/profile", () => ({ buildProfile: m.buildProfile }));
 vi.mock("@/app/queries/sessions", () => ({
   getActiveSession: m.getActiveSession,
-  getCompletedSession: m.getCompletedSession,
+  getResumableSession: m.getResumableSession,
   createSession: m.createSession,
 }));
 vi.mock("@/app/tutor/anthropic", () => ({ getAnthropic: m.getAnthropic }));
@@ -80,7 +80,7 @@ beforeEach(() => {
   m.isStudentEnrolled.mockResolvedValue(true);
   m.buildProfile.mockResolvedValue(profile);
   m.getActiveSession.mockResolvedValue(null);
-  m.getCompletedSession.mockResolvedValue(null);
+  m.getResumableSession.mockResolvedValue(null);
   m.createSession.mockResolvedValue({ id: "sess-new" });
   m.openSession.mockResolvedValue({ stream: greetingStream });
   m.cacheGet.mockResolvedValue(null);
@@ -152,15 +152,14 @@ describe("POST /api/sessions — create", () => {
 
   it("falls back to resume when the create races (unique conflict)", async () => {
     m.createSession.mockResolvedValue({ conflict: true });
-    m.getActiveSession
-      .mockResolvedValueOnce(null) // initial lookup: no active row
-      .mockResolvedValueOnce({
-        id: "sess-winner",
-        phase: "gap_check",
-        status: "active",
-        gapState: { gaps: [] },
-        solveAttemptRecorded: false,
-      });
+    m.getResumableSession.mockResolvedValue(null); // initial lookup: nothing to resume
+    m.getActiveSession.mockResolvedValue({
+      id: "sess-winner",
+      phase: "gap_check",
+      status: "active",
+      gapState: { gaps: [] },
+      solveAttemptRecorded: false,
+    });
     m.cacheGet.mockResolvedValue(null);
 
     const res = await POST(makeReq({ problemId: "p1" }));
@@ -182,7 +181,7 @@ describe("POST /api/sessions — resume", () => {
   };
 
   it("resumes from cache without calling Claude (seed stripped)", async () => {
-    m.getActiveSession.mockResolvedValue(activeRow);
+    m.getResumableSession.mockResolvedValue(activeRow);
     m.cacheGet.mockResolvedValue([
       { role: "user", content: SESSION_SEED_MESSAGE },
       { role: "assistant", content: "Earlier greeting" },
@@ -204,7 +203,7 @@ describe("POST /api/sessions — resume", () => {
   });
 
   it("returns an empty transcript with the durable phase on a cache miss", async () => {
-    m.getActiveSession.mockResolvedValue(activeRow);
+    m.getResumableSession.mockResolvedValue(activeRow);
     m.cacheGet.mockResolvedValue(null);
 
     const res = await POST(makeReq({ problemId: "p1" }));
@@ -217,7 +216,7 @@ describe("POST /api/sessions — resume", () => {
   it.each(["solve", "review"] as const)(
     "resuming mid-%s returns the problem already unlocked, with no extra turn",
     async (phase) => {
-      m.getActiveSession.mockResolvedValue({
+      m.getResumableSession.mockResolvedValue({
         id: "sess-unlocked",
         phase,
         status: "active",
@@ -254,8 +253,7 @@ describe("POST /api/sessions — resume a completed session for review", () => {
   };
 
   it("serves the completed session back with the summary as the transcript, no new Claude call", async () => {
-    m.getActiveSession.mockResolvedValue(null);
-    m.getCompletedSession.mockResolvedValue(completedRow);
+    m.getResumableSession.mockResolvedValue(completedRow);
 
     const res = await POST(makeReq({ problemId: "p1" }));
     expect(res.status).toBe(200);
@@ -272,11 +270,12 @@ describe("POST /api/sessions — resume a completed session for review", () => {
 
     expect(m.openSession).not.toHaveBeenCalled();
     expect(m.createSession).not.toHaveBeenCalled();
+    // A completed session's transcript never comes from the cache.
+    expect(m.cacheGet).not.toHaveBeenCalled();
   });
 
   it("falls back to an empty transcript when no completion summary was recorded", async () => {
-    m.getActiveSession.mockResolvedValue(null);
-    m.getCompletedSession.mockResolvedValue({
+    m.getResumableSession.mockResolvedValue({
       ...completedRow,
       completionSummary: null,
     });
@@ -286,19 +285,14 @@ describe("POST /api/sessions — resume a completed session for review", () => {
     expect(json.messages).toEqual([]);
   });
 
-  it("prefers an active session over a completed one when both somehow exist", async () => {
-    m.getActiveSession.mockResolvedValue({
-      id: "sess-active",
-      phase: "gap_check",
-      status: "active",
-      gapState: { gaps: [] },
-      solveAttemptRecorded: false,
+  it("treats a successfully-persisted empty-string summary as a real (empty) message, not a missing one", async () => {
+    m.getResumableSession.mockResolvedValue({
+      ...completedRow,
+      completionSummary: "",
     });
-    m.cacheGet.mockResolvedValue(null);
 
     const res = await POST(makeReq({ problemId: "p1" }));
     const json = await res.json();
-    expect(json.sessionId).toBe("sess-active");
-    expect(m.getCompletedSession).not.toHaveBeenCalled();
+    expect(json.messages).toEqual([{ role: "assistant", content: "" }]);
   });
 });
