@@ -26,6 +26,14 @@ describe("classifyMisconception", () => {
     return { anthropic: { messages: { create } } as unknown as Anthropic, create };
   }
 
+  /** Pulls the `messages` array out of the first call the mocked `create` received. */
+  function messagesOf(
+    create: ReturnType<typeof vi.fn>,
+  ): Anthropic.MessageParam[] {
+    const [params] = create.mock.calls[0] as [Anthropic.MessageCreateParams];
+    return params.messages;
+  }
+
   it("resolves to null for a careless mistake", async () => {
     const { anthropic } = makeAnthropic(
       JSON.stringify({ misconception: null }),
@@ -65,8 +73,7 @@ describe("classifyMisconception", () => {
 
     await classifyMisconception(input, anthropic);
 
-    const [params] = create.mock.calls[0] as [Anthropic.MessageCreateParams];
-    const [message] = params.messages;
+    const [message] = messagesOf(create);
     expect(message.content).toContain("What is 3/4 + 1/8?");
     expect(message.content).toContain("7/8");
     expect(message.content).toContain("4/12");
