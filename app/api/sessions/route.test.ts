@@ -10,6 +10,7 @@ const m = vi.hoisted(() => ({
   isStudentEnrolled: vi.fn(),
   buildProfile: vi.fn(),
   getActiveSession: vi.fn(),
+  getCompletedSession: vi.fn(),
   createSession: vi.fn(),
   openSession: vi.fn(),
   getAnthropic: vi.fn(() => ({})),
@@ -25,6 +26,7 @@ vi.mock("@/app/queries/enrollments", () => ({
 vi.mock("@/app/queries/profile", () => ({ buildProfile: m.buildProfile }));
 vi.mock("@/app/queries/sessions", () => ({
   getActiveSession: m.getActiveSession,
+  getCompletedSession: m.getCompletedSession,
   createSession: m.createSession,
 }));
 vi.mock("@/app/tutor/anthropic", () => ({ getAnthropic: m.getAnthropic }));
@@ -78,6 +80,7 @@ beforeEach(() => {
   m.isStudentEnrolled.mockResolvedValue(true);
   m.buildProfile.mockResolvedValue(profile);
   m.getActiveSession.mockResolvedValue(null);
+  m.getCompletedSession.mockResolvedValue(null);
   m.createSession.mockResolvedValue({ id: "sess-new" });
   m.openSession.mockResolvedValue({ stream: greetingStream });
   m.cacheGet.mockResolvedValue(null);
@@ -236,4 +239,66 @@ describe("POST /api/sessions — resume", () => {
       expect(m.createSession).not.toHaveBeenCalled();
     },
   );
+});
+
+describe("POST /api/sessions — resume a completed session for review", () => {
+  const completedRow = {
+    id: "sess-done",
+    phase: "review",
+    status: "completed",
+    gapState: {
+      gaps: [{ topicId: FRACTIONS, name: "Adding Fractions", resolved: true }],
+    },
+    solveAttemptRecorded: true,
+    completionSummary: "Nicely done — recap of the key idea.",
+  };
+
+  it("serves the completed session back with the summary as the transcript, no new Claude call", async () => {
+    m.getActiveSession.mockResolvedValue(null);
+    m.getCompletedSession.mockResolvedValue(completedRow);
+
+    const res = await POST(makeReq({ problemId: "p1" }));
+    expect(res.status).toBe(200);
+    const json = await res.json();
+
+    expect(json.sessionId).toBe("sess-done");
+    expect(json.phase).toBe("review");
+    expect(json.status).toBe("completed");
+    expect(json.problem.unlocked).toBe(true);
+    expect(json.problem.questionContent).toBe(problem.questionContent);
+    expect(json.messages).toEqual([
+      { role: "assistant", content: "Nicely done — recap of the key idea." },
+    ]);
+
+    expect(m.openSession).not.toHaveBeenCalled();
+    expect(m.createSession).not.toHaveBeenCalled();
+  });
+
+  it("falls back to an empty transcript when no completion summary was recorded", async () => {
+    m.getActiveSession.mockResolvedValue(null);
+    m.getCompletedSession.mockResolvedValue({
+      ...completedRow,
+      completionSummary: null,
+    });
+
+    const res = await POST(makeReq({ problemId: "p1" }));
+    const json = await res.json();
+    expect(json.messages).toEqual([]);
+  });
+
+  it("prefers an active session over a completed one when both somehow exist", async () => {
+    m.getActiveSession.mockResolvedValue({
+      id: "sess-active",
+      phase: "gap_check",
+      status: "active",
+      gapState: { gaps: [] },
+      solveAttemptRecorded: false,
+    });
+    m.cacheGet.mockResolvedValue(null);
+
+    const res = await POST(makeReq({ problemId: "p1" }));
+    const json = await res.json();
+    expect(json.sessionId).toBe("sess-active");
+    expect(m.getCompletedSession).not.toHaveBeenCalled();
+  });
 });
