@@ -150,11 +150,21 @@ export async function POST(
         // Persist the turn. On completion the transcript is dropped (the durable
         // learning signal already lives in masteries/weaknesses), but this final
         // reply is kept as a minimal completion summary so a later review-resume
-        // (API-3) has something to show. Otherwise we append this turn's user +
+        // has something to show. Write the summary BEFORE dropping the cache: the
+        // durable row is already marked completed by this point (line ~126), so
+        // if the summary write fails (logged inside setCompletionSummary, which
+        // never throws) we keep the transcript cached rather than deleting the
+        // only remaining copy of it. Otherwise we append this turn's user +
         // assistant messages for the next turn.
         if (completed) {
-          await historyCache.delete(sessionId);
-          await setCompletionSummary(supabase, sessionId, assistantText);
+          const summarySaved = await setCompletionSummary(
+            supabase,
+            sessionId,
+            assistantText,
+          );
+          if (summarySaved) {
+            await historyCache.delete(sessionId);
+          }
         } else {
           await historyCache.append(
             sessionId,
