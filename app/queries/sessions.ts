@@ -14,7 +14,11 @@ import {
 // in-memory `TutoringState` maps to/from the row via toPersisted/fromPersisted.
 
 /** A session row reduced to its persisted state plus the row id. */
-export type SessionRow = { id: string } & PersistedTutoringState;
+export type SessionRow = { id: string } & PersistedTutoringState & {
+    /** The final tutor reply from the turn that completed the session, or
+     * null for an active session (or a completed one predating API-3). */
+    completionSummary: string | null;
+  };
 
 /** A session row plus its ownership keys (for the turn endpoint's auth + problem load). */
 export type OwnedSessionRow = SessionRow & {
@@ -37,7 +41,9 @@ export async function getActiveSession(
 ): Promise<SessionRow | null> {
   const { data, error } = await supabase
     .from("tutoring_sessions")
-    .select("id, phase, status, gap_state, solve_attempt_recorded")
+    .select(
+      "id, phase, status, gap_state, solve_attempt_recorded, completion_summary",
+    )
     .eq("student_id", studentId)
     .eq("problem_id", problemId)
     .eq("status", "active")
@@ -58,6 +64,46 @@ export async function getActiveSession(
     status: row.status as SessionStatus,
     gapState: (row.gap_state ?? { gaps: [] }) as { gaps: GapEntry[] },
     solveAttemptRecorded: row.solve_attempt_recorded ?? false,
+    completionSummary: row.completion_summary ?? null,
+  };
+}
+
+/**
+ * The single completed session for a (student, problem), or null. Lets the
+ * bootstrap endpoint (API-2/API-3) serve a finished problem back for review
+ * instead of silently starting a new session over it.
+ */
+export async function getCompletedSession(
+  supabase: SupabaseClient,
+  studentId: string,
+  problemId: string,
+): Promise<SessionRow | null> {
+  const { data, error } = await supabase
+    .from("tutoring_sessions")
+    .select(
+      "id, phase, status, gap_state, solve_attempt_recorded, completion_summary",
+    )
+    .eq("student_id", studentId)
+    .eq("problem_id", problemId)
+    .eq("status", "completed")
+    .order("created_at", { ascending: false })
+    .limit(1);
+
+  if (error) {
+    console.error("Error fetching completed session:", error.message);
+    return null;
+  }
+
+  const row = data?.[0];
+  if (!row) return null;
+
+  return {
+    id: row.id,
+    phase: row.phase as Phase,
+    status: row.status as SessionStatus,
+    gapState: (row.gap_state ?? { gaps: [] }) as { gaps: GapEntry[] },
+    solveAttemptRecorded: row.solve_attempt_recorded ?? false,
+    completionSummary: row.completion_summary ?? null,
   };
 }
 
@@ -75,7 +121,7 @@ export async function getSessionById(
   const { data, error } = await supabase
     .from("tutoring_sessions")
     .select(
-      "id, student_id, problem_id, phase, status, gap_state, solve_attempt_recorded",
+      "id, student_id, problem_id, phase, status, gap_state, solve_attempt_recorded, completion_summary",
     )
     .eq("id", sessionId)
     .maybeSingle();
@@ -94,6 +140,7 @@ export async function getSessionById(
     status: data.status as SessionStatus,
     gapState: (data.gap_state ?? { gaps: [] }) as { gaps: GapEntry[] },
     solveAttemptRecorded: data.solve_attempt_recorded ?? false,
+    completionSummary: data.completion_summary ?? null,
   };
 }
 
@@ -197,6 +244,31 @@ export async function updateSessionState(
 
   if (error) {
     console.error("Error updating session state:", error.message);
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * Records the minimal completion summary (the final tutor reply from the
+ * turn that completed the session) once the transcript itself is dropped
+ * from the history cache. Used by the turn endpoint (API-1) only on the turn
+ * that completes a session, so a later resume-for-review (API-3) has
+ * something to show besides an empty transcript.
+ */
+export async function setCompletionSummary(
+  supabase: SupabaseClient,
+  sessionId: string,
+  summary: string,
+): Promise<boolean> {
+  const { error } = await supabase
+    .from("tutoring_sessions")
+    .update({ completion_summary: summary })
+    .eq("id", sessionId);
+
+  if (error) {
+    console.error("Error setting completion summary:", error.message);
     return false;
   }
 
