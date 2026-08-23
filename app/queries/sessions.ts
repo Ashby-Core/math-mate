@@ -16,7 +16,8 @@ import {
 /** A session row reduced to its persisted state plus the row id. */
 export type SessionRow = { id: string } & PersistedTutoringState & {
     /** The final tutor reply from the turn that completed the session, or
-     * null for an active session (or a completed one predating API-3). */
+     * null for an active session (or a completed one from before this
+     * column existed). */
     completionSummary: string | null;
   };
 
@@ -28,6 +29,28 @@ export type OwnedSessionRow = SessionRow & {
 
 /** createSession outcome: the new id, or a conflict to resume, or null on error. */
 export type CreateSessionResult = { id: string } | { conflict: true };
+
+const SESSION_ROW_COLUMNS =
+  "id, phase, status, gap_state, solve_attempt_recorded, completion_summary";
+
+/** Shapes one raw `tutoring_sessions` row (selected via `SESSION_ROW_COLUMNS`) into a `SessionRow`. */
+function toSessionRow(row: {
+  id: string;
+  phase: string;
+  status: string;
+  gap_state: unknown;
+  solve_attempt_recorded: boolean | null;
+  completion_summary: string | null;
+}): SessionRow {
+  return {
+    id: row.id,
+    phase: row.phase as Phase,
+    status: row.status as SessionStatus,
+    gapState: (row.gap_state ?? { gaps: [] }) as { gaps: GapEntry[] },
+    solveAttemptRecorded: row.solve_attempt_recorded ?? false,
+    completionSummary: row.completion_summary ?? null,
+  };
+}
 
 /**
  * The single active session for a (student, problem), or null. Filters
@@ -41,9 +64,7 @@ export async function getActiveSession(
 ): Promise<SessionRow | null> {
   const { data, error } = await supabase
     .from("tutoring_sessions")
-    .select(
-      "id, phase, status, gap_state, solve_attempt_recorded, completion_summary",
-    )
+    .select(SESSION_ROW_COLUMNS)
     .eq("student_id", studentId)
     .eq("problem_id", problemId)
     .eq("status", "active")
@@ -56,55 +77,40 @@ export async function getActiveSession(
   }
 
   const row = data?.[0];
-  if (!row) return null;
-
-  return {
-    id: row.id,
-    phase: row.phase as Phase,
-    status: row.status as SessionStatus,
-    gapState: (row.gap_state ?? { gaps: [] }) as { gaps: GapEntry[] },
-    solveAttemptRecorded: row.solve_attempt_recorded ?? false,
-    completionSummary: row.completion_summary ?? null,
-  };
+  return row ? toSessionRow(row) : null;
 }
 
 /**
- * The single completed session for a (student, problem), or null. Lets the
- * bootstrap endpoint (API-2/API-3) serve a finished problem back for review
- * instead of silently starting a new session over it.
+ * The session to resume for a (student, problem) pair, or null if there is
+ * none: a completed session (to review) if one exists, otherwise the active
+ * one. A single query rather than two sequential lookups — completed
+ * outranks active the same way `STATUS_RANK` (below) does, since once a
+ * problem is solved the bootstrap endpoint always serves that session back
+ * for review rather than an older active row for the same problem.
  */
-export async function getCompletedSession(
+export async function getResumableSession(
   supabase: SupabaseClient,
   studentId: string,
   problemId: string,
 ): Promise<SessionRow | null> {
   const { data, error } = await supabase
     .from("tutoring_sessions")
-    .select(
-      "id, phase, status, gap_state, solve_attempt_recorded, completion_summary",
-    )
+    .select(SESSION_ROW_COLUMNS)
     .eq("student_id", studentId)
     .eq("problem_id", problemId)
-    .eq("status", "completed")
-    .order("created_at", { ascending: false })
-    .limit(1);
+    .in("status", ["active", "completed"])
+    .order("created_at", { ascending: false });
 
   if (error) {
-    console.error("Error fetching completed session:", error.message);
+    console.error("Error fetching resumable session:", error.message);
     return null;
   }
+  if (!data || data.length === 0) return null;
 
-  const row = data?.[0];
-  if (!row) return null;
-
-  return {
-    id: row.id,
-    phase: row.phase as Phase,
-    status: row.status as SessionStatus,
-    gapState: (row.gap_state ?? { gaps: [] }) as { gaps: GapEntry[] },
-    solveAttemptRecorded: row.solve_attempt_recorded ?? false,
-    completionSummary: row.completion_summary ?? null,
-  };
+  const row =
+    data.find((r) => r.status === "completed") ??
+    data.find((r) => r.status === "active");
+  return row ? toSessionRow(row) : null;
 }
 
 /**
@@ -120,9 +126,7 @@ export async function getSessionById(
 ): Promise<OwnedSessionRow | null> {
   const { data, error } = await supabase
     .from("tutoring_sessions")
-    .select(
-      "id, student_id, problem_id, phase, status, gap_state, solve_attempt_recorded, completion_summary",
-    )
+    .select(`student_id, problem_id, ${SESSION_ROW_COLUMNS}`)
     .eq("id", sessionId)
     .maybeSingle();
 
@@ -133,14 +137,9 @@ export async function getSessionById(
   if (!data) return null;
 
   return {
-    id: data.id,
+    ...toSessionRow(data),
     studentId: data.student_id,
     problemId: data.problem_id,
-    phase: data.phase as Phase,
-    status: data.status as SessionStatus,
-    gapState: (data.gap_state ?? { gaps: [] }) as { gaps: GapEntry[] },
-    solveAttemptRecorded: data.solve_attempt_recorded ?? false,
-    completionSummary: data.completion_summary ?? null,
   };
 }
 
@@ -253,9 +252,9 @@ export async function updateSessionState(
 /**
  * Records the minimal completion summary (the final tutor reply from the
  * turn that completed the session) once the transcript itself is dropped
- * from the history cache. Used by the turn endpoint (API-1) only on the turn
- * that completes a session, so a later resume-for-review (API-3) has
- * something to show besides an empty transcript.
+ * from the history cache. Used by the turn endpoint only on the turn that
+ * completes a session, so a later review-resume has something to show
+ * besides an empty transcript.
  */
 export async function setCompletionSummary(
   supabase: SupabaseClient,
