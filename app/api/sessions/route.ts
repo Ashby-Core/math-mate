@@ -1,17 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
 import type Anthropic from "@anthropic-ai/sdk";
+import { Problem, StudentProfile } from "@/app/types";
 import { requireUserApi } from "@/app/queries/auth";
 import { getProblemById } from "@/app/queries/problems";
 import { isStudentEnrolled } from "@/app/queries/enrollments";
 import { buildProfile } from "@/app/queries/profile";
-import { createSession, getActiveSession } from "@/app/queries/sessions";
+import {
+  createSession,
+  getActiveSession,
+  getResumableSession,
+} from "@/app/queries/sessions";
 import { getAnthropic } from "@/app/tutor/anthropic";
 import { openSession, SESSION_SEED_MESSAGE } from "@/app/tutor/conversation";
-import { fromPersisted, initTutoringState } from "@/app/tutor/stateMachine";
+import {
+  fromPersisted,
+  initTutoringState,
+  TutoringState,
+} from "@/app/tutor/stateMachine";
 import { toSessionResponse } from "@/app/tutor/responseShape";
 import { historyCache } from "@/lib/historyCache";
 
-// API-2 — POST /api/sessions: bootstrap or resume a per-problem tutoring session.
+// POST /api/sessions: bootstrap or resume a per-problem tutoring session.
 // Needs Node (Anthropic SDK + Supabase SSR client) and must never be cached.
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,6 +31,17 @@ function textOf(message: Anthropic.Message): string {
     .filter((b): b is Anthropic.TextBlock => b.type === "text")
     .map((b) => b.text)
     .join("");
+}
+
+/** The 200 JSON response shared by every resume/create branch below. */
+function sessionJson(args: {
+  sessionId: string;
+  state: TutoringState;
+  profile: StudentProfile;
+  problem: Problem;
+  history: Anthropic.MessageParam[];
+}) {
+  return NextResponse.json(toSessionResponse(args), { status: 200 });
 }
 
 export async function POST(req: NextRequest) {
@@ -60,16 +80,25 @@ export async function POST(req: NextRequest) {
   const profile = await buildProfile(supabase, user.id, courseId);
 
   try {
-    // Resume the active session if one exists (durable phase from the row;
-    // transcript from the cache, empty on a miss).
-    const existing = await getActiveSession(supabase, user.id, problemId);
-    if (existing) {
-      const state = fromPersisted(existing);
-      const history = (await historyCache.get(existing.id)) ?? [];
-      return NextResponse.json(
-        toSessionResponse({ sessionId: existing.id, state, profile, problem, history }),
-        { status: 200 },
-      );
+    // Resume the session to pick up where the student left off: a completed
+    // one (for review — no new Claude call, transcript is that session's
+    // persisted completion summary) if one exists, otherwise an active one
+    // (transcript from the cache, empty on a miss). A completed session's
+    // transcript is gone by design (deleted from the cache on completion), so
+    // its display history is just the one completion-summary reply persisted
+    // at that time — checked against `null` (not falsiness) so a
+    // successfully-persisted empty string isn't mistaken for a missing
+    // summary. Never a fabricated user turn the server never accepted.
+    const resumable = await getResumableSession(supabase, user.id, problemId);
+    if (resumable) {
+      const state = fromPersisted(resumable);
+      const history: Anthropic.MessageParam[] =
+        resumable.status === "completed"
+          ? resumable.completionSummary !== null
+            ? [{ role: "assistant", content: resumable.completionSummary }]
+            : []
+          : ((await historyCache.get(resumable.id)) ?? []);
+      return sessionJson({ sessionId: resumable.id, state, profile, problem, history });
     }
 
     // Create a fresh session. Generate the greeting FIRST so a Claude failure
@@ -104,10 +133,7 @@ export async function POST(req: NextRequest) {
       }
       const state = fromPersisted(winner);
       const history = (await historyCache.get(winner.id)) ?? [];
-      return NextResponse.json(
-        toSessionResponse({ sessionId: winner.id, state, profile, problem, history }),
-        { status: 200 },
-      );
+      return sessionJson({ sessionId: winner.id, state, profile, problem, history });
     }
 
     const history: Anthropic.MessageParam[] = [
@@ -116,10 +142,7 @@ export async function POST(req: NextRequest) {
     ];
     await historyCache.set(created.id, history);
 
-    return NextResponse.json(
-      toSessionResponse({ sessionId: created.id, state, profile, problem, history }),
-      { status: 200 },
-    );
+    return sessionJson({ sessionId: created.id, state, profile, problem, history });
   } catch (err) {
     console.error("Error bootstrapping session:", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });

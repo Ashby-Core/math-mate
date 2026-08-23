@@ -4,7 +4,9 @@ import type { TutoringState } from "@/app/tutor/stateMachine";
 import {
   createSession,
   getActiveSession,
+  getResumableSession,
   getSessionById,
+  setCompletionSummary,
   updateSessionState,
 } from "./sessions";
 
@@ -34,6 +36,7 @@ describe("getActiveSession", () => {
       status: "active",
       gapState: { gaps },
       solveAttemptRecorded: true,
+      completionSummary: null,
     });
   });
 
@@ -69,6 +72,66 @@ describe("getActiveSession", () => {
   });
 });
 
+describe("getResumableSession", () => {
+  const completedRow = {
+    id: "s-done",
+    phase: "review",
+    status: "completed",
+    gap_state: { gaps },
+    solve_attempt_recorded: true,
+    completion_summary: "Nicely done — recap.",
+  };
+  const activeRow = {
+    id: "s-active",
+    phase: "gap_check",
+    status: "active",
+    gap_state: { gaps },
+    solve_attempt_recorded: false,
+    completion_summary: null,
+  };
+
+  it("prefers the completed session when both an active and a completed row exist", async () => {
+    const { client } = fakeSupabase({
+      data: [activeRow, completedRow],
+      error: null,
+    });
+    expect(await getResumableSession(client, "u1", "p1")).toEqual({
+      id: "s-done",
+      phase: "review",
+      status: "completed",
+      gapState: { gaps },
+      solveAttemptRecorded: true,
+      completionSummary: "Nicely done — recap.",
+    });
+  });
+
+  it("returns the active session when there is no completed row", async () => {
+    const { client } = fakeSupabase({ data: [activeRow], error: null });
+    const row = await getResumableSession(client, "u1", "p1");
+    expect(row).toEqual({
+      id: "s-active",
+      phase: "gap_check",
+      status: "active",
+      gapState: { gaps },
+      solveAttemptRecorded: false,
+      completionSummary: null,
+    });
+  });
+
+  it("returns null when there is no active or completed row", async () => {
+    const { client } = fakeSupabase({ data: [], error: null });
+    expect(await getResumableSession(client, "u1", "p1")).toBeNull();
+  });
+
+  it("returns null on error", async () => {
+    const { client } = fakeSupabase({
+      data: null,
+      error: { message: "boom" },
+    });
+    expect(await getResumableSession(client, "u1", "p1")).toBeNull();
+  });
+});
+
 describe("getSessionById", () => {
   it("includes the owning student and problem ids", async () => {
     const { client } = fakeSupabase({
@@ -91,6 +154,7 @@ describe("getSessionById", () => {
       status: "active",
       gapState: { gaps },
       solveAttemptRecorded: true,
+      completionSummary: null,
     });
   });
 
@@ -182,5 +246,23 @@ describe("updateSessionState", () => {
   it("returns false on error", async () => {
     const { client } = fakeSupabase({ error: { message: "boom" } });
     expect(await updateSessionState(client, "s1", state)).toBe(false);
+  });
+});
+
+describe("setCompletionSummary", () => {
+  it("persists the summary and returns true", async () => {
+    const { client, chains } = fakeSupabase({ error: null });
+    expect(
+      await setCompletionSummary(client, "s1", "Nicely done — recap."),
+    ).toBe(true);
+    expect(chains[0].update).toHaveBeenCalledWith({
+      completion_summary: "Nicely done — recap.",
+    });
+    expect(chains[0].eq).toHaveBeenCalledWith("id", "s1");
+  });
+
+  it("returns false on error", async () => {
+    const { client } = fakeSupabase({ error: { message: "boom" } });
+    expect(await setCompletionSummary(client, "s1", "recap")).toBe(false);
   });
 });

@@ -21,6 +21,7 @@ const METHODS = [
   "select",
   "eq",
   "neq",
+  "in",
   "order",
   "limit",
   "insert",

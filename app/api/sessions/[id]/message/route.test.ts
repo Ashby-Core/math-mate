@@ -9,6 +9,7 @@ const m = vi.hoisted(() => ({
   buildProfile: vi.fn(),
   getSessionById: vi.fn(),
   updateSessionState: vi.fn(),
+  setCompletionSummary: vi.fn(),
   getAnthropic: vi.fn(() => ({})),
   handleTurn: vi.fn(),
   cacheGet: vi.fn(),
@@ -22,6 +23,7 @@ vi.mock("@/app/queries/profile", () => ({ buildProfile: m.buildProfile }));
 vi.mock("@/app/queries/sessions", () => ({
   getSessionById: m.getSessionById,
   updateSessionState: m.updateSessionState,
+  setCompletionSummary: m.setCompletionSummary,
 }));
 vi.mock("@/app/tutor/anthropic", () => ({ getAnthropic: m.getAnthropic }));
 // Keep the rest of the module real (responseShape imports from it); stub only handleTurn.
@@ -113,6 +115,7 @@ beforeEach(() => {
   m.buildProfile.mockResolvedValue(profile);
   m.getSessionById.mockResolvedValue(sessionRow);
   m.updateSessionState.mockResolvedValue(true);
+  m.setCompletionSummary.mockResolvedValue(true);
   m.handleTurn.mockResolvedValue({
     state: activeState,
     event: { type: "GAP_ATTEMPT", correct: false },
@@ -236,6 +239,7 @@ describe("POST /api/sessions/[id]/message — streaming turn", () => {
       { role: "assistant", content: "Let's check fractions." },
     );
     expect(m.cacheDelete).not.toHaveBeenCalled();
+    expect(m.setCompletionSummary).not.toHaveBeenCalled();
   });
 
   it("deletes the transcript and reports completed when the turn finishes the session", async () => {
@@ -259,6 +263,11 @@ describe("POST /api/sessions/[id]/message — streaming turn", () => {
     expect(frames.at(-1)).toEqual({ type: "done", status: "completed" });
     expect(m.cacheDelete).toHaveBeenCalledWith("sess-x");
     expect(m.cacheAppend).not.toHaveBeenCalled();
+    expect(m.setCompletionSummary).toHaveBeenCalledWith(
+      {},
+      "sess-x",
+      "Nicely done.",
+    );
   });
 
   it("emits an error frame (not a status code) if the reply stream fails mid-flight", async () => {
@@ -284,5 +293,6 @@ describe("POST /api/sessions/[id]/message — streaming turn", () => {
     expect(frames.at(-1)).toEqual({ type: "error", message: "Reply stream failed" });
     // A failed turn does not write the transcript.
     expect(m.cacheAppend).not.toHaveBeenCalled();
+    expect(m.setCompletionSummary).not.toHaveBeenCalled();
   });
 });
