@@ -253,7 +253,11 @@ export default function TutorShell({ problemId }: { problemId: string }) {
         <Card className="mt-4 flex min-h-0 flex-1 flex-col">
           <CardContent className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
             {session.messages.length === 0 && turn.kind !== "streaming" ? (
-              <p className="text-muted-foreground">No messages yet.</p>
+              <p className="text-muted-foreground">
+                {completed
+                  ? "No summary is available for this session."
+                  : "No messages yet."}
+              </p>
             ) : (
               session.messages.map((m, i) => <MessageBubble key={i} message={m} />)
             )}
