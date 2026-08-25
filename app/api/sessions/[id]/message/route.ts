@@ -98,7 +98,7 @@ export async function POST(
   const history = (await historyCache.get(sessionId)) ?? [];
 
   // Run the turn. This makes the judge call, advances the phase, fires the
-  // (stubbed) misconception + mastery side effects, and hands back the reply
+  // misconception + mastery side effects, and hands back the reply
   // stream — all the state is settled by the time this resolves. A throw here is
   // still a clean 500 because we haven't opened the response stream yet.
   let result;
