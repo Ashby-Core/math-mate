@@ -61,6 +61,21 @@ function turnContext(
   };
 }
 
+/**
+ * The tutor's ad-hoc gap-check question, for the misconception classifier —
+ * there's no stored version of it (unlike the assignment problem's fixed
+ * question/answer), so it's pulled from the last assistant turn in history.
+ */
+function lastAssistantMessage(history: Anthropic.MessageParam[]): string {
+  for (let i = history.length - 1; i >= 0; i--) {
+    const message = history[i];
+    if (message.role === "assistant" && typeof message.content === "string") {
+      return message.content;
+    }
+  }
+  return "";
+}
+
 function streamReply(
   deps: ConversationDeps,
   profile: StudentProfile,
@@ -168,10 +183,14 @@ export async function handleTurn(
         : (problem.tops[0] ?? "");
     await classifyMisconception(
       {
-        problem,
-        correctAnswer: problem.correctAnswer,
+        question:
+          state.phase === "gap_check"
+            ? lastAssistantMessage(history)
+            : problem.questionContent,
+        correctAnswer: state.phase === "gap_check" ? null : problem.correctAnswer,
         studentAnswer: studentMessage,
         topicId,
+        topicName: profile.topicMasteryScores[topicId]?.name ?? "",
       },
       deps.anthropic,
     );

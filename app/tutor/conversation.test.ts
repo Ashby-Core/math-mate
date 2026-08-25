@@ -136,22 +136,32 @@ describe("handleTurn — gap_check", () => {
     expect(mockUpdate).toHaveBeenCalledWith({}, "student-1", FRACTIONS, true);
   });
 
-  it("stays in gap_check, fires MI, and records a wrong attempt (attempted without correct)", async () => {
+  it("stays in gap_check, fires MI against the tutor's ad-hoc question (not the assignment problem), and records a wrong attempt", async () => {
     const { deps } = makeDeps({ isAttempt: true, correct: false });
     const state = gapCheckState();
+    const gapCheckQuestion = "What is 1/2 + 1/4?";
     const result = await handleTurn(deps, {
       profile: GAP_PROFILE,
       problem: PROBLEM,
       state,
-      history: [],
+      history: [{ role: "assistant", content: gapCheckQuestion }],
       studentMessage: "1/4",
     });
 
     expect(result.state).toBe(state); // no-op (phase unchanged)
     expect(result.misconceptionFired).toBe(true);
     expect(mockClassify).toHaveBeenCalledTimes(1);
+    // Regression guard: a gap-check attempt must be classified against the
+    // tutor's own ad-hoc question, never the assignment problem's fixed
+    // question/answer — the student wasn't answering PROBLEM here.
     expect(mockClassify).toHaveBeenCalledWith(
-      expect.objectContaining({ topicId: FRACTIONS, studentAnswer: "1/4" }),
+      expect.objectContaining({
+        topicId: FRACTIONS,
+        studentAnswer: "1/4",
+        question: gapCheckQuestion,
+        correctAnswer: null,
+        topicName: "Adding Fractions",
+      }),
       expect.anything(),
     );
     expect(result.masteryUpdated).toBe(true);
@@ -295,6 +305,15 @@ describe("handleTurn — solve & completion", () => {
     expect(result.state.solveAttemptRecorded).toBe(true);
     expect(result.misconceptionFired).toBe(true);
     expect(mockClassify).toHaveBeenCalledTimes(1);
+    // Unlike gap_check, a solve attempt is classified against the assignment
+    // problem's own fixed question/answer.
+    expect(mockClassify).toHaveBeenCalledWith(
+      expect.objectContaining({
+        question: PROBLEM.questionContent,
+        correctAnswer: PROBLEM.correctAnswer,
+      }),
+      expect.anything(),
+    );
     // Not deferred to eventual completion — a wrong first attempt still
     // leaves a real mastery data point even if the session is abandoned here.
     expect(result.masteryUpdated).toBe(true);

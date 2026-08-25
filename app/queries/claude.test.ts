@@ -1,22 +1,16 @@
 import { describe, expect, it, vi } from "vitest";
-import type { UUID } from "crypto";
 import Anthropic from "@anthropic-ai/sdk";
-import { classifyMisconception } from "./claude";
+import { classifyMisconception, MisconceptionInput } from "./claude";
 
 // Real Haiku classification. Uses a fake Anthropic client (same pattern as
 // judge.test.ts) so no live API calls happen in tests.
 describe("classifyMisconception", () => {
-  const input = {
-    problem: {
-      id: "p1" as UUID,
-      questionContent: "What is 3/4 + 1/8?",
-      correctAnswer: "7/8",
-      orderIndex: 0,
-      tops: ["t1" as UUID],
-    },
+  const input: MisconceptionInput = {
+    question: "What is 3/4 + 1/8?",
     correctAnswer: "7/8",
     studentAnswer: "4/12",
     topicId: "t1",
+    topicName: "Adding Fractions",
   };
 
   function makeAnthropic(responseText: string | null) {
@@ -75,7 +69,7 @@ describe("classifyMisconception", () => {
     await expect(classifyMisconception(input, anthropic)).resolves.toBeNull();
   });
 
-  it("sends the problem and both values to the model", async () => {
+  it("sends the topic, question, and both values to the model", async () => {
     const { anthropic, create } = makeAnthropic(
       JSON.stringify({ misconception: null }),
     );
@@ -83,8 +77,35 @@ describe("classifyMisconception", () => {
     await classifyMisconception(input, anthropic);
 
     const [message] = messagesOf(create);
+    expect(message.content).toContain("Adding Fractions");
     expect(message.content).toContain("What is 3/4 + 1/8?");
     expect(message.content).toContain("7/8");
     expect(message.content).toContain("4/12");
+  });
+
+  it("classifies against topicName and the model's own knowledge when correctAnswer is null (a gap-check attempt)", async () => {
+    // A gap-check question is invented by the tutor on the fly and has no
+    // stored correct answer — this is what conversation.ts passes for a wrong
+    // GAP_ATTEMPT, distinct from a solve attempt's fixed problem answer.
+    const gapCheckInput: MisconceptionInput = {
+      question: "What is 1/2 + 1/4?",
+      correctAnswer: null,
+      studentAnswer: "2/6",
+      topicId: "t1",
+      topicName: "Adding Fractions",
+    };
+    const { anthropic, create } = makeAnthropic(
+      JSON.stringify({ misconception: "adds denominators together" }),
+    );
+
+    const result = await classifyMisconception(gapCheckInput, anthropic);
+
+    expect(result).toBe("adds denominators together");
+    const [message] = messagesOf(create);
+    expect(message.content).toContain("What is 1/2 + 1/4?");
+    expect(message.content).not.toContain("What is 3/4 + 1/8?"); // never the assignment problem
+    expect(message.content).toContain(
+      "not given — use your own knowledge of the topic",
+    );
   });
 });
