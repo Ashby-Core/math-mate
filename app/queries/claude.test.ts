@@ -3,8 +3,8 @@ import type { UUID } from "crypto";
 import Anthropic from "@anthropic-ai/sdk";
 import { classifyMisconception } from "./claude";
 
-// Real Haiku classification (MI-1). Uses a fake Anthropic client (same
-// pattern as judge.test.ts) so no live API calls happen in tests.
+// Real Haiku classification. Uses a fake Anthropic client (same pattern as
+// judge.test.ts) so no live API calls happen in tests.
 describe("classifyMisconception", () => {
   const input = {
     problem: {
@@ -62,6 +62,15 @@ describe("classifyMisconception", () => {
 
   it("resolves to null when no text block is returned", async () => {
     const { anthropic } = makeAnthropic(null);
+
+    await expect(classifyMisconception(input, anthropic)).resolves.toBeNull();
+  });
+
+  it("resolves to null instead of throwing when the API call itself fails", async () => {
+    const create = vi.fn(async () => {
+      throw new Error("rate limited");
+    });
+    const anthropic = { messages: { create } } as unknown as Anthropic;
 
     await expect(classifyMisconception(input, anthropic)).resolves.toBeNull();
   });

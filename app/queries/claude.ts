@@ -2,11 +2,12 @@ import Anthropic from "@anthropic-ai/sdk";
 import { Problem } from "@/app/types";
 import { getAnthropic } from "@/app/tutor/anthropic";
 import { MISCONCEPTION_MODEL } from "@/app/tutor/constants";
+import { DESCRIPTION_MAX } from "@/app/queries/weaknesses";
 
-// Claude-backed inference that feeds the student knowledge profile (MI-1). On
-// every wrong answer, the tutoring conversation handler (TS-3) calls this to
-// classify *why* the student was wrong, so the profile can name the
-// misconception rather than just record a miss. MI-3 wires the async write path.
+// Claude-backed inference that feeds the student knowledge profile. On every
+// wrong answer, the tutoring conversation handler calls this to classify
+// *why* the student was wrong, so the profile can name the misconception
+// rather than just record a miss.
 
 export type MisconceptionInput = {
   problem: Problem;
@@ -19,16 +20,14 @@ export type InferMisconception = (
   input: MisconceptionInput,
 ) => Promise<string | null>;
 
-// Matches the `student_topic_weaknesses.description` column cap. Truncated
-// here too (not just in insertWeakness) so a caller that skips the insert
-// path still gets a bounded string.
-const DESCRIPTION_MAX = 100;
-
 const MISCONCEPTION_SCHEMA = {
   type: "object",
   properties: {
     misconception: {
-      type: ["string", "null"],
+      // Nullable via anyOf, not a `type: ["string", "null"]` array — the
+      // latter isn't a documented-supported JSON Schema shape for Claude's
+      // structured outputs.
+      anyOf: [{ type: "string" }, { type: "null" }],
       description:
         "A short (5-10 word) description of the student's underlying conceptual misunderstanding, phrased so a tutor could name it directly (e.g. 'adds numerators and denominators separately'). null if the wrong answer looks like a careless slip (arithmetic slip, sign error, transcription mistake) rather than clear evidence the student misunderstands the concept.",
     },
@@ -63,32 +62,35 @@ Respond using the required structured format only.`;
  * testable core of `inferMisconception`, mirroring `judgeTurn`'s DI pattern
  * so tests never make a live API call.
  *
- * Returns `null` — never throws — on a malformed/unparseable model response,
- * mirroring judge.ts's "never let a flaky model corrupt state" failure mode.
+ * Returns `null` — never throws — on any failure (API error, missing text
+ * block, or a malformed/unparseable response), mirroring judge.ts's "never
+ * let a flaky model corrupt state" failure mode: a bad call here must never
+ * take down the turn that's asking about a wrong answer, not just fail to
+ * classify it.
  */
 export async function classifyMisconception(
   input: MisconceptionInput,
   anthropic: Anthropic,
 ): Promise<string | null> {
-  const response = await anthropic.messages.create({
-    model: MISCONCEPTION_MODEL,
-    max_tokens: 128,
-    system: misconceptionSystemPrompt(),
-    messages: [
-      {
-        role: "user",
-        content: `Problem: ${input.problem.questionContent}
+  try {
+    const response = await anthropic.messages.create({
+      model: MISCONCEPTION_MODEL,
+      max_tokens: 128,
+      system: misconceptionSystemPrompt(),
+      messages: [
+        {
+          role: "user",
+          content: `Problem: ${input.problem.questionContent}
 Correct answer: ${input.correctAnswer}
 Student's answer: ${input.studentAnswer}`,
-      },
-    ],
-    output_config: { format: { type: "json_schema", schema: MISCONCEPTION_SCHEMA } },
-  });
+        },
+      ],
+      output_config: { format: { type: "json_schema", schema: MISCONCEPTION_SCHEMA } },
+    });
 
-  const text = response.content.find((b) => b.type === "text")?.text;
-  if (!text) return null;
+    const text = response.content.find((b) => b.type === "text")?.text;
+    if (!text) return null;
 
-  try {
     const parsed = JSON.parse(text) as { misconception: string | null };
     if (!parsed.misconception) return null;
     return parsed.misconception.slice(0, DESCRIPTION_MAX);
