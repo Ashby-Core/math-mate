@@ -60,13 +60,17 @@ describe("classifyMisconception", () => {
     await expect(classifyMisconception(input, anthropic)).resolves.toBeNull();
   });
 
-  it("resolves to null instead of throwing when the API call itself fails", async () => {
+  it("resolves to null instead of throwing when the API call itself fails, and logs it", async () => {
     const create = vi.fn(async () => {
       throw new Error("rate limited");
     });
     const anthropic = { messages: { create } } as unknown as Anthropic;
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
     await expect(classifyMisconception(input, anthropic)).resolves.toBeNull();
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+
+    errorSpy.mockRestore();
   });
 
   it("sends the topic, question, and both values to the model", async () => {

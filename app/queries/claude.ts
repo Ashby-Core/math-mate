@@ -77,7 +77,8 @@ Respond using the required structured format only.`;
  * block, or a malformed/unparseable response), mirroring judge.ts's "never
  * let a flaky model corrupt state" failure mode: a bad call here must never
  * take down the turn that's asking about a wrong answer, not just fail to
- * classify it.
+ * classify it. Failures are logged (not silently swallowed), matching the
+ * query layer's log+swallow convention.
  */
 export async function classifyMisconception(
   input: MisconceptionInput,
@@ -106,7 +107,8 @@ Student's answer: ${input.studentAnswer}`,
     const parsed = JSON.parse(text) as { misconception: string | null };
     if (!parsed.misconception) return null;
     return parsed.misconception.slice(0, DESCRIPTION_MAX);
-  } catch {
+  } catch (error) {
+    console.error("Error classifying misconception:", error);
     return null;
   }
 }
