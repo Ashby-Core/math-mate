@@ -40,7 +40,7 @@ The system is a strict dependency chain — DB → queries → tutor brain → H
 - `app/queries/profile.ts::buildProfile` composes the mastery/weakness queries into the `StudentProfile` injected into the tutor prompt. It is rebuilt fresh per problem (never cached) so a mid-session misconception write is reflected on the next rebuild.
 
 ### Tutor brain — `app/tutor/` (pure logic + injected Claude)
-This is the core. No HTTP, no direct DB — dependencies (the Anthropic client, Supabase client, misconception fn) are **injected** so everything is unit-testable with fakes.
+This is the core. No HTTP, no direct DB — the Anthropic and Supabase clients are **injected** (`ConversationDeps`) so everything is unit-testable with fakes. Side-effect-only query calls that `conversation.ts` doesn't branch on the result of — `updateMasteryCounts`, `classifyMisconception` (misconception classification) — are module-imported directly rather than threaded through `ConversationDeps`, and mocked at the module level in tests (`vi.mock` in `conversation.test.ts`) instead of swapped via an injected function param.
 - `stateMachine.ts` — the deterministic, serializable phase machine: `intro → gap_check → solve → review → completed`. Pure reducer (`advance(state, event)`); events come from judging a turn. `toPersisted`/`fromPersisted` map state to/from the `tutoring_sessions` row (phase + status columns, gaps in a `gap_state` jsonb).
 - `gaps.ts` — single source of truth for *what is a gap*. A problem's prerequisites are exactly its tagged topics (`problem.tops`); there is no separate topic→topic prereq graph. `classifyTopic` → `GAP` / `OK` / `UNASSESSED` against `GAP_THRESHOLD`.
 - `systemPrompt.ts` — builds the Sonnet system prompt as three blocks: a byte-identical `STATIC_RULES` policy block marked `cache_control: ephemeral` (stable, cacheable prefix — keep all per-student/per-turn content out of it), then per-session context, then the per-turn instruction. Snapshot-tested.
@@ -70,7 +70,7 @@ Server-component pages under `app/dashboard`, `app/courses`, `app/login`, etc.; 
 - **Commit messages:** `type(scope): short description`
   - Types: `feat`, `fix`, `chore`, `docs`, `refactor`, `test`
   - Example: `feat(booking): add availability calendar component`
-- The misconception pipeline (`app/queries/claude.ts::inferMisconception`) is currently a **no-op stub** always returning `null`. `conversation.ts` already calls it on wrong answers; Milestone 5 replaces the body and wires the async write path. Don't assume it does anything yet.
+- The misconception pipeline's classification call (`app/queries/claude.ts::classifyMisconception`) is real — `conversation.ts` calls it inline on every wrong answer and gets back a short description or `null`. Its result isn't persisted or deduped yet (no write to `student_topic_weaknesses`, no matching against existing weaknesses for the topic) and the call isn't deferred, so it still adds Haiku latency to the reply; the rest of Milestone 5 wires the dedup + async write path.
 - When adding a query function, follow the existing shape: typed return, `console.error` + return empty/null on Supabase error, use the injected/SSR client — and add a colocated `*.test.ts`.
 - Keep Claude models and thresholds in `app/tutor/constants.ts`, not inline.
 - Supabase MCP server (`.mcp.json`) requires interactive auth before its tools are usable.
