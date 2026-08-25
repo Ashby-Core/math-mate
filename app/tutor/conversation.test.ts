@@ -162,11 +162,32 @@ describe("handleTurn — gap_check", () => {
         correctAnswer: null,
         topicName: "Adding Fractions",
       }),
-      expect.anything(),
+      // Regression guard: must reuse the turn's injected client, not a fresh
+      // one built internally (the exact bug fixed in an earlier commit).
+      deps.anthropic,
     );
     expect(result.masteryUpdated).toBe(true);
     expect(mockUpdate).toHaveBeenCalledTimes(1);
     expect(mockUpdate).toHaveBeenCalledWith({}, "student-1", FRACTIONS, false);
+  });
+
+  it("skips MI on a wrong gap-check attempt when history is empty (a history-cache miss), instead of classifying a blank question", async () => {
+    const { deps } = makeDeps({ isAttempt: true, correct: false });
+    const state = gapCheckState();
+    const result = await handleTurn(deps, {
+      profile: GAP_PROFILE,
+      problem: PROBLEM,
+      state,
+      history: [], // simulates historyCache.get() missing — route.ts falls back to []
+      studentMessage: "1/4",
+    });
+
+    expect(result.misconceptionFired).toBe(false);
+    expect(mockClassify).not.toHaveBeenCalled();
+    // The mastery write is unaffected — it doesn't depend on the tutor's
+    // question text, only on the judged correctness.
+    expect(result.masteryUpdated).toBe(true);
+    expect(mockUpdate).toHaveBeenCalledTimes(1);
   });
 
   it("treats a clarifying question as not-an-attempt (no event, no MI, no mastery write)", async () => {
@@ -262,8 +283,8 @@ describe("handleTurn — solve & completion", () => {
     expect(result.masteryUpdated).toBe(true);
     expect(mockUpdate).toHaveBeenCalledTimes(1);
     expect(mockUpdate).toHaveBeenCalledWith({}, "student-1", FRACTIONS, false);
-    // Still an attempt, just not a final one — the (stubbed) MI pipeline fires
-    // the same as any other non-final solve turn.
+    // Still an attempt, just not a final one — the MI pipeline fires the
+    // same as any other non-final solve turn.
     expect(mockClassify).toHaveBeenCalledTimes(1);
     // The raw model verdict survives the gate on `judged`, distinct from the
     // gated `event.correct` above — this is what lets the tutor's prompt tell
@@ -312,7 +333,9 @@ describe("handleTurn — solve & completion", () => {
         question: PROBLEM.questionContent,
         correctAnswer: PROBLEM.correctAnswer,
       }),
-      expect.anything(),
+      // Regression guard: must reuse the turn's injected client, not a fresh
+      // one built internally (the exact bug fixed in an earlier commit).
+      deps.anthropic,
     );
     // Not deferred to eventual completion — a wrong first attempt still
     // leaves a real mastery data point even if the session is abandoned here.
