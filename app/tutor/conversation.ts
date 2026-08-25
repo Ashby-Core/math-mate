@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { SupabaseClient } from "@supabase/supabase-js";
 import { Problem, StudentProfile } from "@/app/types";
 import { updateMasteryCounts } from "@/app/queries/masteries";
-import { inferMisconception, InferMisconception } from "@/app/queries/claude";
+import { classifyMisconception } from "@/app/queries/claude";
 import { TUTOR_MODEL } from "./constants";
 import { buildSystemPrompt, TurnContext } from "./systemPrompt";
 import { judgeTurn, JudgeResult } from "./judge";
@@ -10,7 +10,7 @@ import { advance, currentGap, TutoringEvent, TutoringState } from "./stateMachin
 
 // The per-turn conversation handler. Ties the system prompt and
 // the phase state machine to live Claude calls: judge the student's
-// message, advance the phase deterministically, fire the (stubbed) misconception
+// message, advance the phase deterministically, fire the misconception
 // pipeline on wrong answers, write live mastery updates, and stream the Sonnet
 // reply. Dependencies are injected so the handler is unit-testable with mocks.
 
@@ -30,8 +30,6 @@ type ReplyStream = ReturnType<Anthropic["messages"]["stream"]>;
 export type ConversationDeps = {
   anthropic: Anthropic;
   supabase: SupabaseClient;
-  /** Injectable for tests; defaults to the real (stubbed) MI pipeline. */
-  inferMisconception?: InferMisconception;
 };
 
 export type HandleTurnResult = {
@@ -61,6 +59,21 @@ function turnContext(
     totalGaps: state.gaps.length,
     valueMatchesFinalAnswer,
   };
+}
+
+/**
+ * The tutor's ad-hoc gap-check question, for the misconception classifier —
+ * there's no stored version of it (unlike the assignment problem's fixed
+ * question/answer), so it's pulled from the last assistant turn in history.
+ */
+function lastAssistantMessage(history: Anthropic.MessageParam[]): string {
+  for (let i = history.length - 1; i >= 0; i--) {
+    const message = history[i];
+    if (message.role === "assistant" && typeof message.content === "string") {
+      return message.content;
+    }
+  }
+  return "";
 }
 
 function streamReply(
@@ -117,7 +130,6 @@ export async function handleTurn(
   },
 ): Promise<HandleTurnResult> {
   const { profile, problem, state, history, studentMessage, isFinalAttempt } = args;
-  const fireMisconception = deps.inferMisconception ?? inferMisconception;
 
   // 1. Derive the transition event for this phase (judging only where needed).
   let event: TutoringEvent | null = null;
@@ -165,17 +177,37 @@ export async function handleTurn(
     (event?.type === "GAP_ATTEMPT" || event?.type === "SOLVE_ATTEMPT") &&
     !event.correct
   ) {
-    const topicId =
+    const question =
       state.phase === "gap_check"
-        ? (currentGap(state)?.topicId ?? "")
-        : (problem.tops[0] ?? "");
-    await fireMisconception({
-      problem,
-      correctAnswer: problem.correctAnswer,
-      studentAnswer: studentMessage,
-      topicId,
-    });
-    misconceptionFired = true;
+        ? lastAssistantMessage(history)
+        : problem.questionContent;
+    // A gap-check question only exists in `history` — there's no stored
+    // fallback like there is for the assignment problem. On a history-cache
+    // miss (an expected condition; see historyCache.ts) there's nothing to
+    // classify against, so skip rather than send Haiku a blank question and
+    // risk a confident-sounding misconception from no signal at all.
+    if (state.phase !== "gap_check" || question) {
+      const topicId =
+        state.phase === "gap_check"
+          ? (currentGap(state)?.topicId ?? "")
+          : (problem.tops[0] ?? "");
+      const misconception = await classifyMisconception(
+        {
+          question,
+          correctAnswer: state.phase === "gap_check" ? null : problem.correctAnswer,
+          studentAnswer: studentMessage,
+          topicId,
+          topicName: profile.topicMasteryScores[topicId]?.name ?? "",
+        },
+        deps.anthropic,
+      );
+      // Visibility until the dedup + persistence path lands — the result
+      // isn't written anywhere yet, so this is the only record of it today.
+      console.log(
+        `[misconception] topic=${topicId} phase=${state.phase} result=${misconception ?? "null"}`,
+      );
+      misconceptionFired = true;
+    }
   }
 
   // Mastery writes are live per-turn, not deferred to completion (TS-5):

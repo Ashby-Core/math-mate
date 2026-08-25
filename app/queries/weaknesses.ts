@@ -9,7 +9,7 @@ function embeddedName(topics: unknown): string {
 }
 
 // student_topic_weaknesses.description is varchar(100); truncate before insert.
-const DESCRIPTION_MAX = 100;
+export const DESCRIPTION_MAX = 100;
 
 const WEAKNESS_SELECT =
   "id, topic_id, description, observed_count, last_observed, topics(name)";
