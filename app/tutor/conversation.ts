@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { SupabaseClient } from "@supabase/supabase-js";
 import { Problem, StudentProfile } from "@/app/types";
 import { updateMasteryCounts } from "@/app/queries/masteries";
-import { classifyMisconception, InferMisconception } from "@/app/queries/claude";
+import { classifyMisconception } from "@/app/queries/claude";
 import { TUTOR_MODEL } from "./constants";
 import { buildSystemPrompt, TurnContext } from "./systemPrompt";
 import { judgeTurn, JudgeResult } from "./judge";
@@ -30,8 +30,6 @@ type ReplyStream = ReturnType<Anthropic["messages"]["stream"]>;
 export type ConversationDeps = {
   anthropic: Anthropic;
   supabase: SupabaseClient;
-  /** Injectable for tests; defaults to classifying via the injected `anthropic` client. */
-  inferMisconception?: InferMisconception;
 };
 
 export type HandleTurnResult = {
@@ -117,10 +115,6 @@ export async function handleTurn(
   },
 ): Promise<HandleTurnResult> {
   const { profile, problem, state, history, studentMessage, isFinalAttempt } = args;
-  const fireMisconception =
-    deps.inferMisconception ??
-    ((misconceptionInput) =>
-      classifyMisconception(misconceptionInput, deps.anthropic));
 
   // 1. Derive the transition event for this phase (judging only where needed).
   let event: TutoringEvent | null = null;
@@ -172,12 +166,15 @@ export async function handleTurn(
       state.phase === "gap_check"
         ? (currentGap(state)?.topicId ?? "")
         : (problem.tops[0] ?? "");
-    await fireMisconception({
-      problem,
-      correctAnswer: problem.correctAnswer,
-      studentAnswer: studentMessage,
-      topicId,
-    });
+    await classifyMisconception(
+      {
+        problem,
+        correctAnswer: problem.correctAnswer,
+        studentAnswer: studentMessage,
+        topicId,
+      },
+      deps.anthropic,
+    );
     misconceptionFired = true;
   }
 

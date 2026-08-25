@@ -1,6 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { Problem } from "@/app/types";
-import { getAnthropic } from "@/app/tutor/anthropic";
 import { MISCONCEPTION_MODEL } from "@/app/tutor/constants";
 import { DESCRIPTION_MAX } from "@/app/queries/weaknesses";
 
@@ -15,10 +14,6 @@ export type MisconceptionInput = {
   studentAnswer: string;
   topicId: string;
 };
-
-export type InferMisconception = (
-  input: MisconceptionInput,
-) => Promise<string | null>;
 
 const MISCONCEPTION_SCHEMA = {
   type: "object",
@@ -58,9 +53,9 @@ Respond using the required structured format only.`;
 }
 
 /**
- * Classifies a wrong answer against an injected Anthropic client — the
- * testable core of `inferMisconception`, mirroring `judgeTurn`'s DI pattern
- * so tests never make a live API call.
+ * Classifies a wrong answer against an injected Anthropic client, mirroring
+ * `judgeTurn`'s dependency-injection pattern so tests never make a live API
+ * call.
  *
  * Returns `null` — never throws — on any failure (API error, missing text
  * block, or a malformed/unparseable response), mirroring judge.ts's "never
@@ -98,13 +93,3 @@ Student's answer: ${input.studentAnswer}`,
     return null;
   }
 }
-
-/**
- * Infers a short misconception description from a wrong answer, or `null`
- * when the mistake looks careless rather than conceptual. Builds its own
- * Anthropic client via `getAnthropic()` since `InferMisconception`'s
- * signature — fixed by `conversation.ts`'s dependency on it — has no room
- * for an injected one; `classifyMisconception` is the injectable core.
- */
-export const inferMisconception: InferMisconception = (input) =>
-  classifyMisconception(input, getAnthropic());
