@@ -177,24 +177,37 @@ export async function handleTurn(
     (event?.type === "GAP_ATTEMPT" || event?.type === "SOLVE_ATTEMPT") &&
     !event.correct
   ) {
-    const topicId =
+    const question =
       state.phase === "gap_check"
-        ? (currentGap(state)?.topicId ?? "")
-        : (problem.tops[0] ?? "");
-    await classifyMisconception(
-      {
-        question:
-          state.phase === "gap_check"
-            ? lastAssistantMessage(history)
-            : problem.questionContent,
-        correctAnswer: state.phase === "gap_check" ? null : problem.correctAnswer,
-        studentAnswer: studentMessage,
-        topicId,
-        topicName: profile.topicMasteryScores[topicId]?.name ?? "",
-      },
-      deps.anthropic,
-    );
-    misconceptionFired = true;
+        ? lastAssistantMessage(history)
+        : problem.questionContent;
+    // A gap-check question only exists in `history` — there's no stored
+    // fallback like there is for the assignment problem. On a history-cache
+    // miss (an expected condition; see historyCache.ts) there's nothing to
+    // classify against, so skip rather than send Haiku a blank question and
+    // risk a confident-sounding misconception from no signal at all.
+    if (state.phase !== "gap_check" || question) {
+      const topicId =
+        state.phase === "gap_check"
+          ? (currentGap(state)?.topicId ?? "")
+          : (problem.tops[0] ?? "");
+      const misconception = await classifyMisconception(
+        {
+          question,
+          correctAnswer: state.phase === "gap_check" ? null : problem.correctAnswer,
+          studentAnswer: studentMessage,
+          topicId,
+          topicName: profile.topicMasteryScores[topicId]?.name ?? "",
+        },
+        deps.anthropic,
+      );
+      // Visibility until the dedup + persistence path lands — the result
+      // isn't written anywhere yet, so this is the only record of it today.
+      console.log(
+        `[misconception] topic=${topicId} phase=${state.phase} result=${misconception ?? "null"}`,
+      );
+      misconceptionFired = true;
+    }
   }
 
   // Mastery writes are live per-turn, not deferred to completion (TS-5):
