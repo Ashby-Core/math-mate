@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { SupabaseClient } from "@supabase/supabase-js";
 import { Problem, StudentProfile } from "@/app/types";
 import { updateMasteryCounts } from "@/app/queries/masteries";
-import { inferMisconception, InferMisconception } from "@/app/queries/claude";
+import { classifyMisconception, InferMisconception } from "@/app/queries/claude";
 import { TUTOR_MODEL } from "./constants";
 import { buildSystemPrompt, TurnContext } from "./systemPrompt";
 import { judgeTurn, JudgeResult } from "./judge";
@@ -10,7 +10,7 @@ import { advance, currentGap, TutoringEvent, TutoringState } from "./stateMachin
 
 // The per-turn conversation handler. Ties the system prompt and
 // the phase state machine to live Claude calls: judge the student's
-// message, advance the phase deterministically, fire the (stubbed) misconception
+// message, advance the phase deterministically, fire the misconception
 // pipeline on wrong answers, write live mastery updates, and stream the Sonnet
 // reply. Dependencies are injected so the handler is unit-testable with mocks.
 
@@ -30,7 +30,7 @@ type ReplyStream = ReturnType<Anthropic["messages"]["stream"]>;
 export type ConversationDeps = {
   anthropic: Anthropic;
   supabase: SupabaseClient;
-  /** Injectable for tests; defaults to the real (stubbed) MI pipeline. */
+  /** Injectable for tests; defaults to classifying via the injected `anthropic` client. */
   inferMisconception?: InferMisconception;
 };
 
@@ -117,7 +117,10 @@ export async function handleTurn(
   },
 ): Promise<HandleTurnResult> {
   const { profile, problem, state, history, studentMessage, isFinalAttempt } = args;
-  const fireMisconception = deps.inferMisconception ?? inferMisconception;
+  const fireMisconception =
+    deps.inferMisconception ??
+    ((misconceptionInput) =>
+      classifyMisconception(misconceptionInput, deps.anthropic));
 
   // 1. Derive the transition event for this phase (judging only where needed).
   let event: TutoringEvent | null = null;
