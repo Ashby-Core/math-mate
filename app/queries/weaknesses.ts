@@ -52,6 +52,41 @@ export async function getWeaknesses(
 }
 
 /**
+ * Returns the student's weaknesses for a single topic, already known by id
+ * (unlike getWeaknesses, no course join is needed to scope the query).
+ *
+ * @param supabase the Supabase client
+ * @param studentId the student whose weaknesses to fetch
+ * @param topicId the topic to scope to
+ * @returns a list of TopicWeakness, or [] on error
+ */
+export async function getWeaknessesForTopic(
+  supabase: SupabaseClient,
+  studentId: string,
+  topicId: string,
+): Promise<TopicWeakness[]> {
+  const { data, error } = await supabase
+    .from("student_topic_weaknesses")
+    .select(WEAKNESS_SELECT)
+    .eq("student_id", studentId)
+    .eq("topic_id", topicId);
+
+  if (error || !data) {
+    console.error("Error fetching weaknesses for topic:", error?.message);
+    return [];
+  }
+
+  return data.map((row) => ({
+    id: row.id,
+    topicId: row.topic_id,
+    name: embeddedName(row.topics),
+    description: row.description,
+    observedCount: row.observed_count,
+    lastObserved: row.last_observed,
+  }));
+}
+
+/**
  * Inserts a new weakness for a student+topic. The description is truncated to
  * the column's 100-char cap. Always inserts — semantic dedup lives in the
  * misconception pipeline (MI-2), not here.

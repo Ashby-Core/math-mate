@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fakeSupabase } from "./testSupabase";
-import { getWeaknesses, incrementWeakness, insertWeakness } from "./weaknesses";
+import {
+  getWeaknesses,
+  getWeaknessesForTopic,
+  incrementWeakness,
+  insertWeakness,
+} from "./weaknesses";
 
 beforeEach(() => {
   vi.spyOn(console, "error").mockImplementation(() => {});
@@ -45,6 +50,23 @@ describe("getWeaknesses", () => {
       error: { message: "boom" },
     });
     expect(await getWeaknesses(client, "u1", "c1")).toEqual([]);
+  });
+});
+
+describe("getWeaknessesForTopic", () => {
+  it("maps rows to TopicWeakness, scoped by student and topic", async () => {
+    const { client, chains } = fakeSupabase({ data: [weaknessRow], error: null });
+    expect(await getWeaknessesForTopic(client, "u1", "t1")).toEqual([mappedWeakness]);
+    expect(chains[0].eq).toHaveBeenCalledWith("student_id", "u1");
+    expect(chains[0].eq).toHaveBeenCalledWith("topic_id", "t1");
+  });
+
+  it("returns [] on error", async () => {
+    const { client } = fakeSupabase({
+      data: null,
+      error: { message: "boom" },
+    });
+    expect(await getWeaknessesForTopic(client, "u1", "t1")).toEqual([]);
   });
 });
 
