@@ -367,6 +367,27 @@ describe("handleTurn — solve & completion", () => {
     expect(mockUpdate).toHaveBeenCalledWith({}, "student-1", FRACTIONS, false);
   });
 
+  it("skips MI on a wrong solve attempt when the problem has no tagged topics, instead of firing with an empty topicId", async () => {
+    const { deps } = makeDeps({ isAttempt: true, correct: false });
+    const untaggedProblem = makeProblem([]);
+    const result = await handleTurn(deps, {
+      profile: GAP_PROFILE,
+      problem: untaggedProblem,
+      state: advance(gapCheckState(), { type: "GAP_ATTEMPT", correct: true }),
+      history: [],
+      studentMessage: "1",
+      isFinalAttempt: true,
+    });
+
+    expect(result.misconceptionFired).toBe(false);
+    expect(result.misconceptionPromise).toBeNull();
+    expect(mockClassify).not.toHaveBeenCalled();
+    // The mastery write loops over problem.tops separately from the
+    // misconception pipeline's topicId derivation — with no tagged topics,
+    // that loop body never runs, so there's nothing to update either.
+    expect(mockUpdate).toHaveBeenCalledTimes(0);
+  });
+
   it("never writes problem.tops masteries again after the first solve attempt in a session", async () => {
     const { deps: firstDeps } = makeDeps({ isAttempt: true, correct: false });
     const afterFirst = await handleTurn(firstDeps, {

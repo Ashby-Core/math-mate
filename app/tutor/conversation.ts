@@ -244,16 +244,20 @@ export async function handleTurn(
       state.phase === "gap_check"
         ? lastAssistantMessage(history)
         : problem.questionContent;
+    const topicId =
+      state.phase === "gap_check"
+        ? (currentGap(state)?.topicId ?? "")
+        : (problem.tops[0] ?? "");
     // A gap-check question only exists in `history` — there's no stored
     // fallback like there is for the assignment problem. On a history-cache
     // miss (an expected condition; see historyCache.ts) there's nothing to
     // classify against, so skip rather than send Haiku a blank question and
-    // risk a confident-sounding misconception from no signal at all.
-    if (state.phase !== "gap_check" || question) {
-      const topicId =
-        state.phase === "gap_check"
-          ? (currentGap(state)?.topicId ?? "")
-          : (problem.tops[0] ?? "");
+    // risk a confident-sounding misconception from no signal at all. Likewise
+    // skip on a missing topicId (e.g. a problem tagged with no topics) —
+    // it's a valid UUID column downstream (getWeaknessesForTopic/
+    // insertWeakness), so firing with "" would just be a wasted, erroring DB
+    // round-trip on every such turn.
+    if ((state.phase !== "gap_check" || question) && topicId) {
       misconceptionFired = true;
       // Detached: never awaited here, so a slow or failing classify→dedup→write
       // chain never delays the reply stream below. The route hands this promise
