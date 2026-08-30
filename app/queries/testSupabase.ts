@@ -43,14 +43,18 @@ export function chain(result: QueryResult): Chain {
 }
 
 /**
- * A fake Supabase client whose successive `.from(...)` calls return the chains
- * built from `results` in order (the last result repeats if `.from` is called
- * more times than there are results). Returns the typed client plus the raw
- * chains so tests can assert on the arguments passed to `insert`/`upsert`/etc.
+ * A fake Supabase client whose successive `.from(...)`/`.rpc(...)` calls
+ * return the chains built from `results` in order (the last result repeats if
+ * called more times than there are results). `from` and `rpc` share the same
+ * queue/index so tests can pass results in true call order across both.
+ * Returns the typed client plus the raw chains so tests can assert on the
+ * arguments passed to `insert`/`upsert`/`rpc`/etc.
  */
 export function fakeSupabase(...results: QueryResult[]) {
   const chains = results.map(chain);
   let i = 0;
-  const from = vi.fn(() => chains[Math.min(i++, chains.length - 1)]);
-  return { client: { from } as unknown as SupabaseClient, from, chains };
+  const next = () => chains[Math.min(i++, chains.length - 1)];
+  const from = vi.fn(() => next());
+  const rpc = vi.fn(() => next());
+  return { client: { from, rpc } as unknown as SupabaseClient, from, rpc, chains };
 }

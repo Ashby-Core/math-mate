@@ -130,8 +130,17 @@ export async function insertWeakness(
 
 /**
  * Increments observed_count and refreshes last_observed for an existing
- * weakness (used when the misconception pipeline finds a duplicate). Requires
- * the owner-scoped UPDATE policy from migration 0001.
+ * weakness (used when the misconception pipeline finds a duplicate).
+ *
+ * Does the increment via the `increment_weakness` SQL function (migration
+ * 0006) rather than a SELECT-then-UPDATE in application code: a
+ * read-modify-write across two round-trips loses increments when two calls
+ * for the same row overlap (both read the same count, both write the same
+ * next value) — exactly the condition this detached, concurrency-friendly
+ * pipeline is designed to hit. `SET observed_count = observed_count + 1` in a
+ * single statement is atomic under Postgres's row lock, so it can't lose an
+ * increment that way. The function runs as SECURITY INVOKER (the default),
+ * so the owner-scoped UPDATE policy from migration 0001 still applies.
  *
  * @param supabase the Supabase client
  * @param id the weakness row id
@@ -141,29 +150,29 @@ export async function incrementWeakness(
   supabase: SupabaseClient,
   id: string,
 ): Promise<TopicWeakness | null> {
-  const { data: existing, error: fetchError } = await supabase
-    .from("student_topic_weaknesses")
-    .select("observed_count")
-    .eq("id", id)
-    .single();
+  const { data: rpcData, error: rpcError } = await supabase.rpc(
+    "increment_weakness",
+    { p_weakness_id: id },
+  );
+  // `returns setof ...` comes back as an array.
+  const updated = Array.isArray(rpcData) ? rpcData[0] : rpcData;
 
-  if (fetchError || !existing) {
-    console.error("Error fetching weakness to increment:", fetchError?.message);
+  if (rpcError || !updated) {
+    console.error("Error incrementing weakness:", rpcError?.message);
     return null;
   }
 
+  // The RPC returns the bare row (no join) — re-select with the topic name
+  // embed for the return shape. Not part of the atomic step above: this read
+  // only fills in display data, it doesn't need to be atomic with the write.
   const { data, error } = await supabase
     .from("student_topic_weaknesses")
-    .update({
-      observed_count: existing.observed_count + 1,
-      last_observed: new Date().toISOString(),
-    })
-    .eq("id", id)
     .select(WEAKNESS_SELECT)
+    .eq("id", id)
     .single();
 
   if (error || !data) {
-    console.error("Error incrementing weakness:", error?.message);
+    console.error("Error fetching incremented weakness:", error?.message);
     return null;
   }
 
