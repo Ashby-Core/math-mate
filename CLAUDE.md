@@ -2,11 +2,11 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+If you notice a statement here that's gone stale (contradicted by the current code — e.g. a feature described as "not yet built" that now exists), and fixing it is explicitly allowed or is a natural side effect of the task at hand, update this file to match reality rather than silently working around the discrepancy.
+
 ## What this is
 
-Math Mate is an AI math-tutoring platform. Students work assignment problems through a Claude-powered tutor that (1) probes prerequisite topics that are weak ("gaps"), (2) resolves each gap with a mini-lesson, then (3) scaffolds the student through the problem without ever handing over the answer. Wrong answers are meant to feed inferred misconceptions back into the student's knowledge profile (Milestone 5, not yet built).
-
-`TICKETS.md` is the authoritative roadmap and design record — it tracks milestones, per-ticket scope, and the resolved design decisions (gap threshold, mastery scale, session-persistence strategy, etc.). Read it before starting non-trivial work; update checkboxes when you complete a ticket.
+Math Mate is an AI math-tutoring platform. Students work assignment problems through a Claude-powered tutor that (1) probes prerequisite topics that are weak ("gaps"), (2) resolves each gap with a mini-lesson, then (3) scaffolds the student through the problem without ever handing over the answer. Wrong answers feed inferred misconceptions back into the student's knowledge profile: classified, deduped against existing weaknesses for the topic, and written (insert or increment) via a detached pipeline that never blocks the reply.
 
 ## Commands
 
@@ -40,7 +40,7 @@ The system is a strict dependency chain — DB → queries → tutor brain → H
 - `app/queries/profile.ts::buildProfile` composes the mastery/weakness queries into the `StudentProfile` injected into the tutor prompt. It is rebuilt fresh per problem (never cached) so a mid-session misconception write is reflected on the next rebuild.
 
 ### Tutor brain — `app/tutor/` (pure logic + injected Claude)
-This is the core. No HTTP, no direct DB — the Anthropic and Supabase clients are **injected** (`ConversationDeps`) so everything is unit-testable with fakes. Side-effect-only query calls that `conversation.ts` doesn't branch on the result of — `updateMasteryCounts`, `classifyMisconception` (misconception classification) — are module-imported directly rather than threaded through `ConversationDeps`, and mocked at the module level in tests (`vi.mock` in `conversation.test.ts`) instead of swapped via an injected function param.
+This is the core. No HTTP, no direct DB — the Anthropic and Supabase clients are **injected** (`ConversationDeps`) so everything is unit-testable with fakes. Side-effect-only query calls that `conversation.ts` doesn't branch on the result of — `updateMasteryCounts`, `classifyMisconception`, `matchWeakness`, `getWeaknessesForTopic`, `insertWeakness`, `incrementWeakness` — are module-imported directly rather than threaded through `ConversationDeps`, and mocked at the module level in tests (`vi.mock` in `conversation.test.ts`) instead of swapped via an injected function param.
 - `stateMachine.ts` — the deterministic, serializable phase machine: `intro → gap_check → solve → review → completed`. Pure reducer (`advance(state, event)`); events come from judging a turn. `toPersisted`/`fromPersisted` map state to/from the `tutoring_sessions` row (phase + status columns, gaps in a `gap_state` jsonb).
 - `gaps.ts` — single source of truth for *what is a gap*. A problem's prerequisites are exactly its tagged topics (`problem.tops`); there is no separate topic→topic prereq graph. `classifyTopic` → `GAP` / `OK` / `UNASSESSED` against `GAP_THRESHOLD`.
 - `systemPrompt.ts` — builds the Sonnet system prompt as three blocks: a byte-identical `STATIC_RULES` policy block marked `cache_control: ephemeral` (stable, cacheable prefix — keep all per-student/per-turn content out of it), then per-session context, then the per-turn instruction. Snapshot-tested.
@@ -59,10 +59,10 @@ This is the core. No HTTP, no direct DB — the Anthropic and Supabase clients a
 - **Ephemeral** conversation transcript → `lib/historyCache.ts` (`HistoryCache` interface; currently `InMemoryHistoryCache`, intended to swap to Redis with no caller change). A cache miss is expected in multi-instance/serverless deploys — callers treat a miss as an empty history and continue. Transcript is deleted on completion (TTL is the safety net for abandoned sessions). Full transcript archival is out of scope; the durable learning signal lives in masteries/weaknesses.
 
 ### Front end — `app/` (App Router, React 19)
-Server-component pages under `app/dashboard`, `app/courses`, `app/login`, etc.; shared shadcn/Radix primitives in `app/components/ui/`; Recharts for mastery charts. The tutoring UI (Milestone 4, `FE-*` tickets) is not built yet.
+Server-component pages under `app/dashboard`, `app/courses`, `app/login`, etc.; shared shadcn/Radix primitives in `app/components/ui/`; Recharts for mastery charts. The tutoring UI lives at `app/tutor/[problemId]/` (`page.tsx` is just the auth guard + chrome; `TutorShell.tsx` bootstraps the session client-side against `POST /api/sessions` and drives the turn loop against the message endpoint; `Composer.tsx` is the student input, including the final-answer toggle).
 
 ## Conventions worth knowing
-- **Never reference ticket names/IDs (e.g. `FE-1`, `TS-3`) in code or comments.** Tickets live in `TICKETS.md`; code comments should describe behavior, not roadmap provenance.
+- **Never reference ticket names/IDs (e.g. `FE-1`, `TS-3`) in code or comments.** Code comments should describe behavior, not roadmap provenance.
 - **Branch naming:**
   - Feature: `feat/<TICKET-ID>-short-description` (e.g. `feat/FE-1-split-layout-shell`)
   - Bug fix: `fix/short-description`
@@ -70,7 +70,7 @@ Server-component pages under `app/dashboard`, `app/courses`, `app/login`, etc.; 
 - **Commit messages:** `type(scope): short description`
   - Types: `feat`, `fix`, `chore`, `docs`, `refactor`, `test`
   - Example: `feat(booking): add availability calendar component`
-- The misconception pipeline's classification call (`app/queries/claude.ts::classifyMisconception`) is real — `conversation.ts` calls it inline on every wrong answer and gets back a short description or `null`. Its result isn't persisted or deduped yet (no write to `student_topic_weaknesses`, no matching against existing weaknesses for the topic) and the call isn't deferred, so it still adds Haiku latency to the reply; the rest of Milestone 5 wires the dedup + async write path.
+- The misconception pipeline (`app/queries/claude.ts::classifyMisconception` + `matchWeakness`, orchestrated by `runMisconceptionPipeline` in `conversation.ts`) runs on every wrong answer: classify → dedup against the student's existing weaknesses for the topic (`WEAKNESS_MATCH_CRITERION` in `constants.ts` is the qualitative match bar, since dedup is a Haiku classification, not embeddings) → insert if novel, increment if matched. The whole chain runs detached (fired without being awaited in `handleTurn`, handed to Next's `after()` in the route) so it never adds latency to the reply; failures anywhere in the chain are logged and swallowed, never surfacing to the student or failing the turn.
 - When adding a query function, follow the existing shape: typed return, `console.error` + return empty/null on Supabase error, use the injected/SSR client — and add a colocated `*.test.ts`.
 - Keep Claude models and thresholds in `app/tutor/constants.ts`, not inline.
 - Supabase MCP server (`.mcp.json`) requires interactive auth before its tools are usable.

@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fakeSupabase } from "./testSupabase";
-import { getWeaknesses, incrementWeakness, insertWeakness } from "./weaknesses";
+import {
+  getWeaknesses,
+  getWeaknessesForTopic,
+  incrementWeakness,
+  insertWeakness,
+} from "./weaknesses";
 
 beforeEach(() => {
   vi.spyOn(console, "error").mockImplementation(() => {});
@@ -48,6 +53,23 @@ describe("getWeaknesses", () => {
   });
 });
 
+describe("getWeaknessesForTopic", () => {
+  it("maps rows to TopicWeakness, scoped by student and topic", async () => {
+    const { client, chains } = fakeSupabase({ data: [weaknessRow], error: null });
+    expect(await getWeaknessesForTopic(client, "u1", "t1")).toEqual([mappedWeakness]);
+    expect(chains[0].eq).toHaveBeenCalledWith("student_id", "u1");
+    expect(chains[0].eq).toHaveBeenCalledWith("topic_id", "t1");
+  });
+
+  it("returns [] on error", async () => {
+    const { client } = fakeSupabase({
+      data: null,
+      error: { message: "boom" },
+    });
+    expect(await getWeaknessesForTopic(client, "u1", "t1")).toEqual([]);
+  });
+});
+
 describe("insertWeakness", () => {
   it("inserts and maps the returned row", async () => {
     const { client } = fakeSupabase({ data: weaknessRow, error: null });
@@ -75,32 +97,37 @@ describe("insertWeakness", () => {
 });
 
 describe("incrementWeakness", () => {
-  // First .from() reads observed_count; second updates it.
-  it("bumps observed_count by one and maps the updated row", async () => {
-    const { client, chains } = fakeSupabase(
-      { data: { observed_count: 2 }, error: null },
+  // The increment itself is one atomic SQL statement via the
+  // increment_weakness RPC (migration 0006) rather than a JS read-modify-write
+  // — that's what makes it safe under concurrent calls for the same row. The
+  // follow-up .from() select is only there to fetch the topic name for the
+  // return shape.
+  it("calls the increment_weakness RPC and maps the updated row", async () => {
+    const { client, rpc, chains } = fakeSupabase(
+      { data: [{ ...weaknessRow, observed_count: 3, topics: undefined }], error: null },
       { data: { ...weaknessRow, observed_count: 3 }, error: null },
     );
 
     const result = await incrementWeakness(client, "w1");
 
-    expect(chains[1].update).toHaveBeenCalledWith(
-      expect.objectContaining({ observed_count: 3 }),
-    );
+    expect(rpc).toHaveBeenCalledWith("increment_weakness", { p_weakness_id: "w1" });
+    expect(chains[1].eq).toHaveBeenCalledWith("id", "w1");
     expect(result?.observedCount).toBe(3);
   });
 
-  it("returns null when the weakness can't be fetched", async () => {
-    const { client } = fakeSupabase({
-      data: null,
-      error: { message: "missing" },
-    });
+  it("returns null when the RPC errors", async () => {
+    const { client } = fakeSupabase({ data: null, error: { message: "boom" } });
     expect(await incrementWeakness(client, "w1")).toBeNull();
   });
 
-  it("returns null on update error", async () => {
+  it("returns null when the RPC's setof result is empty (no row matched)", async () => {
+    const { client } = fakeSupabase({ data: [], error: null });
+    expect(await incrementWeakness(client, "w1")).toBeNull();
+  });
+
+  it("returns null when the follow-up fetch fails", async () => {
     const { client } = fakeSupabase(
-      { data: { observed_count: 2 }, error: null },
+      { data: [{ ...weaknessRow, observed_count: 3 }], error: null },
       { data: null, error: { message: "boom" } },
     );
     expect(await incrementWeakness(client, "w1")).toBeNull();

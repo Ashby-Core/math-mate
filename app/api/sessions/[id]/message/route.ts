@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { after, NextRequest, NextResponse } from "next/server";
 import { requireUserApi } from "@/app/queries/auth";
 import { getProblemById } from "@/app/queries/problems";
 import { buildProfile } from "@/app/queries/profile";
@@ -117,6 +117,13 @@ export async function POST(
   } catch (err) {
     console.error("Error handling turn:", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
+  }
+
+  // Defer the misconception write to after() so it never blocks the reply
+  // below — the pipeline's own promise already resolves (never rejects; see
+  // conversation.ts) whether it wrote anything or not.
+  if (result.misconceptionPromise) {
+    after(() => result.misconceptionPromise);
   }
 
   const newState = result.state;

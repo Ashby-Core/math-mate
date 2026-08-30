@@ -93,4 +93,4 @@ npx vitest run -t "resolves a gap on a correct answer"
 - `lib/historyCache.ts` — ephemeral conversation-transcript cache, separate from the durable session row.
 - `app/` (App Router pages) — dashboard, courses, login, and the tutoring UI.
 
-See [TICKETS.md](TICKETS.md) for the full roadmap, milestone status, and resolved design decisions, and [CLAUDE.md](CLAUDE.md) for a deeper architectural writeup.
+See [CLAUDE.md](CLAUDE.md) for a deeper architectural writeup.

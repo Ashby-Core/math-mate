@@ -4,17 +4,35 @@ import Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { Problem, StudentProfile } from "@/app/types";
 import { updateMasteryCounts } from "@/app/queries/masteries";
-import { classifyMisconception } from "@/app/queries/claude";
+import { classifyMisconception, matchWeakness } from "@/app/queries/claude";
+import {
+  getWeaknessesForTopic,
+  incrementWeakness,
+  insertWeakness,
+} from "@/app/queries/weaknesses";
 import { handleTurn, openSession } from "./conversation";
 import { advance, initTutoringState } from "./stateMachine";
 import type { JudgeResult } from "./judge";
 
-// updateMasteryCounts and classifyMisconception are module-imported by the
-// handler (not injected), so mock the modules to observe calls.
+// updateMasteryCounts, classifyMisconception, matchWeakness, and the
+// weaknesses writes are module-imported by the handler (not injected), so
+// mock the modules to observe calls.
 vi.mock("@/app/queries/masteries", () => ({ updateMasteryCounts: vi.fn() }));
-vi.mock("@/app/queries/claude", () => ({ classifyMisconception: vi.fn(async () => null) }));
+vi.mock("@/app/queries/claude", () => ({
+  classifyMisconception: vi.fn(async () => null),
+  matchWeakness: vi.fn(async () => "novel"),
+}));
+vi.mock("@/app/queries/weaknesses", () => ({
+  getWeaknessesForTopic: vi.fn(async () => []),
+  insertWeakness: vi.fn(async () => null),
+  incrementWeakness: vi.fn(async () => null),
+}));
 const mockUpdate = vi.mocked(updateMasteryCounts);
 const mockClassify = vi.mocked(classifyMisconception);
+const mockMatch = vi.mocked(matchWeakness);
+const mockGetWeaknessesForTopic = vi.mocked(getWeaknessesForTopic);
+const mockInsertWeakness = vi.mocked(insertWeakness);
+const mockIncrementWeakness = vi.mocked(incrementWeakness);
 
 const FRACTIONS = "11111111-1111-1111-1111-111111111111" as UUID;
 const DIVISION = "22222222-2222-2222-2222-222222222222" as UUID;
@@ -183,7 +201,12 @@ describe("handleTurn — gap_check", () => {
     });
 
     expect(result.misconceptionFired).toBe(false);
+    expect(result.misconceptionPromise).toBeNull();
     expect(mockClassify).not.toHaveBeenCalled();
+    expect(mockGetWeaknessesForTopic).not.toHaveBeenCalled();
+    expect(mockMatch).not.toHaveBeenCalled();
+    expect(mockInsertWeakness).not.toHaveBeenCalled();
+    expect(mockIncrementWeakness).not.toHaveBeenCalled();
     // The mastery write is unaffected — it doesn't depend on the tutor's
     // question text, only on the judged correctness.
     expect(result.masteryUpdated).toBe(true);
@@ -344,6 +367,27 @@ describe("handleTurn — solve & completion", () => {
     expect(mockUpdate).toHaveBeenCalledWith({}, "student-1", FRACTIONS, false);
   });
 
+  it("skips MI on a wrong solve attempt when the problem has no tagged topics, instead of firing with an empty topicId", async () => {
+    const { deps } = makeDeps({ isAttempt: true, correct: false });
+    const untaggedProblem = makeProblem([]);
+    const result = await handleTurn(deps, {
+      profile: GAP_PROFILE,
+      problem: untaggedProblem,
+      state: advance(gapCheckState(), { type: "GAP_ATTEMPT", correct: true }),
+      history: [],
+      studentMessage: "1",
+      isFinalAttempt: true,
+    });
+
+    expect(result.misconceptionFired).toBe(false);
+    expect(result.misconceptionPromise).toBeNull();
+    expect(mockClassify).not.toHaveBeenCalled();
+    // The mastery write loops over problem.tops separately from the
+    // misconception pipeline's topicId derivation — with no tagged topics,
+    // that loop body never runs, so there's nothing to update either.
+    expect(mockUpdate).toHaveBeenCalledTimes(0);
+  });
+
   it("never writes problem.tops masteries again after the first solve attempt in a session", async () => {
     const { deps: firstDeps } = makeDeps({ isAttempt: true, correct: false });
     const afterFirst = await handleTurn(firstDeps, {
@@ -425,5 +469,174 @@ describe("handleTurn — solve & completion", () => {
     expect(result.state).toBe(completed); // ADVANCE is a no-op once completed
     expect(result.masteryUpdated).toBe(false);
     expect(mockUpdate).not.toHaveBeenCalled();
+  });
+});
+
+describe("handleTurn — misconception pipeline (dedup + write)", () => {
+  it("never blocks the reply stream on the misconception pipeline", async () => {
+    let resolveClassify: (value: string | null) => void = () => {};
+    mockClassify.mockImplementation(
+      () => new Promise((resolve) => { resolveClassify = resolve; }),
+    );
+    const { deps, stream } = makeDeps({ isAttempt: true, correct: false });
+    const gapCheckQuestion = "What is 1/2 + 1/4?";
+
+    const result = await handleTurn(deps, {
+      profile: GAP_PROFILE,
+      problem: PROBLEM,
+      state: gapCheckState(),
+      history: [{ role: "assistant", content: gapCheckQuestion }],
+      studentMessage: "1/4",
+    });
+
+    // The reply stream is already available even though classifyMisconception
+    // hasn't resolved yet — proves the reply never waits on the pipeline.
+    expect(stream).toHaveBeenCalledTimes(1);
+    expect(result.stream).toEqual({ sentinel: "stream" });
+    expect(result.misconceptionPromise).not.toBeNull();
+
+    resolveClassify(null);
+    await result.misconceptionPromise;
+  });
+
+  it("inserts a novel misconception: classify → description, match → novel", async () => {
+    mockClassify.mockResolvedValue("adds numerators and denominators separately");
+    mockMatch.mockResolvedValue("novel");
+    const { deps } = makeDeps({ isAttempt: true, correct: false });
+    const gapCheckQuestion = "What is 1/2 + 1/4?";
+
+    const result = await handleTurn(deps, {
+      profile: GAP_PROFILE,
+      problem: PROBLEM,
+      state: gapCheckState(),
+      history: [{ role: "assistant", content: gapCheckQuestion }],
+      studentMessage: "1/4",
+    });
+    await result.misconceptionPromise;
+
+    expect(mockGetWeaknessesForTopic).toHaveBeenCalledWith({}, "student-1", FRACTIONS);
+    expect(mockMatch).toHaveBeenCalledWith(
+      [],
+      "adds numerators and denominators separately",
+      deps.anthropic,
+    );
+    expect(mockInsertWeakness).toHaveBeenCalledWith(
+      {},
+      "student-1",
+      FRACTIONS,
+      "adds numerators and denominators separately",
+    );
+    expect(mockIncrementWeakness).not.toHaveBeenCalled();
+  });
+
+  it("increments a matched misconception: classify → description, match → existing id", async () => {
+    mockClassify.mockResolvedValue("adds numerators and denominators separately");
+    mockMatch.mockResolvedValue({ id: "w1" });
+    const { deps } = makeDeps({ isAttempt: true, correct: false });
+    const gapCheckQuestion = "What is 1/2 + 1/4?";
+
+    const result = await handleTurn(deps, {
+      profile: GAP_PROFILE,
+      problem: PROBLEM,
+      state: gapCheckState(),
+      history: [{ role: "assistant", content: gapCheckQuestion }],
+      studentMessage: "1/4",
+    });
+    await result.misconceptionPromise;
+
+    expect(mockIncrementWeakness).toHaveBeenCalledWith({}, "w1");
+    expect(mockInsertWeakness).not.toHaveBeenCalled();
+  });
+
+  it("logs result=failed, not a false success, when insertWeakness's write itself fails", async () => {
+    mockClassify.mockResolvedValue("adds numerators and denominators separately");
+    mockMatch.mockResolvedValue("novel");
+    // insertWeakness already logs+swallows its own DB error and resolves
+    // null on failure (the module mock's default) — the pipeline's own
+    // summary log must reflect that, not unconditionally claim "inserted".
+    mockInsertWeakness.mockResolvedValue(null);
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const { deps } = makeDeps({ isAttempt: true, correct: false });
+    const gapCheckQuestion = "What is 1/2 + 1/4?";
+
+    const result = await handleTurn(deps, {
+      profile: GAP_PROFILE,
+      problem: PROBLEM,
+      state: gapCheckState(),
+      history: [{ role: "assistant", content: gapCheckQuestion }],
+      studentMessage: "1/4",
+    });
+    await result.misconceptionPromise;
+
+    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining("result=failed"));
+    logSpy.mockRestore();
+  });
+
+  it("logs result=inserted when the write actually succeeds", async () => {
+    mockClassify.mockResolvedValue("adds numerators and denominators separately");
+    mockMatch.mockResolvedValue("novel");
+    mockInsertWeakness.mockResolvedValue({
+      id: "33333333-3333-3333-3333-333333333333" as UUID,
+      topicId: FRACTIONS,
+      name: "Adding Fractions",
+      description: "adds numerators and denominators separately",
+      observedCount: 1,
+      lastObserved: Date.now(),
+    });
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const { deps } = makeDeps({ isAttempt: true, correct: false });
+    const gapCheckQuestion = "What is 1/2 + 1/4?";
+
+    const result = await handleTurn(deps, {
+      profile: GAP_PROFILE,
+      problem: PROBLEM,
+      state: gapCheckState(),
+      history: [{ role: "assistant", content: gapCheckQuestion }],
+      studentMessage: "1/4",
+    });
+    await result.misconceptionPromise;
+
+    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining("result=inserted"));
+    logSpy.mockRestore();
+  });
+
+  it("skips dedup + write entirely when classification finds no misconception", async () => {
+    mockClassify.mockResolvedValue(null);
+    const { deps } = makeDeps({ isAttempt: true, correct: false });
+    const gapCheckQuestion = "What is 1/2 + 1/4?";
+
+    const result = await handleTurn(deps, {
+      profile: GAP_PROFILE,
+      problem: PROBLEM,
+      state: gapCheckState(),
+      history: [{ role: "assistant", content: gapCheckQuestion }],
+      studentMessage: "1/4",
+    });
+    await result.misconceptionPromise;
+
+    expect(mockGetWeaknessesForTopic).not.toHaveBeenCalled();
+    expect(mockMatch).not.toHaveBeenCalled();
+    expect(mockInsertWeakness).not.toHaveBeenCalled();
+    expect(mockIncrementWeakness).not.toHaveBeenCalled();
+  });
+
+  it("swallows a pipeline failure instead of rejecting, and logs it", async () => {
+    mockClassify.mockRejectedValue(new Error("Haiku is down"));
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { deps } = makeDeps({ isAttempt: true, correct: false });
+    const gapCheckQuestion = "What is 1/2 + 1/4?";
+
+    const result = await handleTurn(deps, {
+      profile: GAP_PROFILE,
+      problem: PROBLEM,
+      state: gapCheckState(),
+      history: [{ role: "assistant", content: gapCheckQuestion }],
+      studentMessage: "1/4",
+    });
+
+    await expect(result.misconceptionPromise).resolves.toBeUndefined();
+    expect(errorSpy).toHaveBeenCalled();
+
+    errorSpy.mockRestore();
   });
 });

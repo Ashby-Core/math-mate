@@ -15,6 +15,13 @@ const m = vi.hoisted(() => ({
   cacheGet: vi.fn(),
   cacheAppend: vi.fn(),
   cacheDelete: vi.fn(),
+  after: vi.fn(),
+}));
+
+// Keep the rest of the module real (NextRequest/NextResponse); stub only after().
+vi.mock("next/server", async (orig) => ({
+  ...(await orig<typeof import("next/server")>()),
+  after: m.after,
 }));
 
 vi.mock("@/app/queries/auth", () => ({ requireUserApi: m.requireUserApi }));
@@ -121,6 +128,7 @@ beforeEach(() => {
     event: { type: "GAP_ATTEMPT", correct: false },
     judged: null,
     misconceptionFired: false,
+    misconceptionPromise: null,
     masteryUpdated: false,
     stream: textStream(["Let's ", "check ", "fractions."]),
   });
@@ -253,6 +261,7 @@ describe("POST /api/sessions/[id]/message — streaming turn", () => {
       event: { type: "SOLVE_ATTEMPT", correct: true },
       judged: null,
       misconceptionFired: false,
+      misconceptionPromise: null,
       masteryUpdated: true,
       stream: textStream(["Nicely done."]),
     });
@@ -280,6 +289,7 @@ describe("POST /api/sessions/[id]/message — streaming turn", () => {
       event: null,
       judged: null,
       misconceptionFired: false,
+      misconceptionPromise: null,
       masteryUpdated: false,
       stream: boom(),
     });
@@ -294,5 +304,31 @@ describe("POST /api/sessions/[id]/message — streaming turn", () => {
     // A failed turn does not write the transcript.
     expect(m.cacheAppend).not.toHaveBeenCalled();
     expect(m.setCompletionSummary).not.toHaveBeenCalled();
+  });
+});
+
+describe("POST /api/sessions/[id]/message — deferred misconception write", () => {
+  it("hands the misconception promise to after() when the pipeline fired", async () => {
+    const misconceptionPromise = Promise.resolve();
+    m.handleTurn.mockResolvedValue({
+      state: activeState,
+      event: { type: "GAP_ATTEMPT", correct: false },
+      judged: null,
+      misconceptionFired: true,
+      misconceptionPromise,
+      masteryUpdated: false,
+      stream: textStream(["Let's ", "check ", "fractions."]),
+    });
+
+    await call({ message: "the denominators match" });
+
+    expect(m.after).toHaveBeenCalledTimes(1);
+    const [callback] = m.after.mock.calls[0] as [() => unknown];
+    expect(callback()).toBe(misconceptionPromise);
+  });
+
+  it("does not call after() when the pipeline did not fire", async () => {
+    await call({ message: "the denominators match" });
+    expect(m.after).not.toHaveBeenCalled();
   });
 });
