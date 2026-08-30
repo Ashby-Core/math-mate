@@ -121,15 +121,21 @@ async function runMisconceptionPipeline(
 
   const existing = await getWeaknessesForTopic(deps.supabase, args.studentId, args.topicId);
   const match = await matchWeakness(existing, description, deps.anthropic);
-  if (match === "novel") {
-    await insertWeakness(deps.supabase, args.studentId, args.topicId, description);
-  } else {
-    await incrementWeakness(deps.supabase, match.id);
-  }
+  // insertWeakness/incrementWeakness already log their own DB error and
+  // return null on failure — check that return value here too, so this
+  // summary line (the only observability this detached pipeline has) never
+  // claims a write succeeded when it silently didn't.
+  const written =
+    match === "novel"
+      ? await insertWeakness(deps.supabase, args.studentId, args.topicId, description)
+      : await incrementWeakness(deps.supabase, match.id);
 
-  console.log(
-    `[misconception] topic=${args.topicId} result=${match === "novel" ? "inserted" : `incremented(${match.id})`}`,
-  );
+  const outcome = !written
+    ? "failed"
+    : match === "novel"
+      ? "inserted"
+      : `incremented(${match.id})`;
+  console.log(`[misconception] topic=${args.topicId} result=${outcome}`);
 }
 
 function streamReply(

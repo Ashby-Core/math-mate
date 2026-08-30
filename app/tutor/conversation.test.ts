@@ -527,6 +527,58 @@ describe("handleTurn — misconception pipeline (dedup + write)", () => {
     expect(mockInsertWeakness).not.toHaveBeenCalled();
   });
 
+  it("logs result=failed, not a false success, when insertWeakness's write itself fails", async () => {
+    mockClassify.mockResolvedValue("adds numerators and denominators separately");
+    mockMatch.mockResolvedValue("novel");
+    // insertWeakness already logs+swallows its own DB error and resolves
+    // null on failure (the module mock's default) — the pipeline's own
+    // summary log must reflect that, not unconditionally claim "inserted".
+    mockInsertWeakness.mockResolvedValue(null);
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const { deps } = makeDeps({ isAttempt: true, correct: false });
+    const gapCheckQuestion = "What is 1/2 + 1/4?";
+
+    const result = await handleTurn(deps, {
+      profile: GAP_PROFILE,
+      problem: PROBLEM,
+      state: gapCheckState(),
+      history: [{ role: "assistant", content: gapCheckQuestion }],
+      studentMessage: "1/4",
+    });
+    await result.misconceptionPromise;
+
+    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining("result=failed"));
+    logSpy.mockRestore();
+  });
+
+  it("logs result=inserted when the write actually succeeds", async () => {
+    mockClassify.mockResolvedValue("adds numerators and denominators separately");
+    mockMatch.mockResolvedValue("novel");
+    mockInsertWeakness.mockResolvedValue({
+      id: "33333333-3333-3333-3333-333333333333" as UUID,
+      topicId: FRACTIONS,
+      name: "Adding Fractions",
+      description: "adds numerators and denominators separately",
+      observedCount: 1,
+      lastObserved: Date.now(),
+    });
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const { deps } = makeDeps({ isAttempt: true, correct: false });
+    const gapCheckQuestion = "What is 1/2 + 1/4?";
+
+    const result = await handleTurn(deps, {
+      profile: GAP_PROFILE,
+      problem: PROBLEM,
+      state: gapCheckState(),
+      history: [{ role: "assistant", content: gapCheckQuestion }],
+      studentMessage: "1/4",
+    });
+    await result.misconceptionPromise;
+
+    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining("result=inserted"));
+    logSpy.mockRestore();
+  });
+
   it("skips dedup + write entirely when classification finds no misconception", async () => {
     mockClassify.mockResolvedValue(null);
     const { deps } = makeDeps({ isAttempt: true, correct: false });
