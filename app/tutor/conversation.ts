@@ -2,7 +2,12 @@ import Anthropic from "@anthropic-ai/sdk";
 import { SupabaseClient } from "@supabase/supabase-js";
 import { Problem, StudentProfile } from "@/app/types";
 import { updateMasteryCounts } from "@/app/queries/masteries";
-import { classifyMisconception } from "@/app/queries/claude";
+import { classifyMisconception, matchWeakness } from "@/app/queries/claude";
+import {
+  getWeaknessesForTopic,
+  incrementWeakness,
+  insertWeakness,
+} from "@/app/queries/weaknesses";
 import { TUTOR_MODEL } from "./constants";
 import { buildSystemPrompt, TurnContext } from "./systemPrompt";
 import { judgeTurn, JudgeResult } from "./judge";
@@ -41,6 +46,14 @@ export type HandleTurnResult = {
   judged: JudgeResult | null;
   /** Whether the MI pipeline was invoked (on a wrong answer). */
   misconceptionFired: boolean;
+  /**
+   * The detached classify→dedup→write pipeline's promise, when it fired this
+   * turn (null otherwise). Never awaited inline — the route hands it to
+   * `after()` so the write lands without blocking the reply stream. Always
+   * resolves (never rejects): failures anywhere in the chain are caught and
+   * logged inside the pipeline itself.
+   */
+  misconceptionPromise: Promise<void> | null;
   /** Whether a mastery write ran this turn (a gap attempt, or the session's first solve attempt). */
   masteryUpdated: boolean;
   /** The streamed tutor reply (also exposes `.finalMessage()`). */
@@ -74,6 +87,49 @@ function lastAssistantMessage(history: Anthropic.MessageParam[]): string {
     }
   }
   return "";
+}
+
+/**
+ * Classifies a wrong answer, dedups it against the student's existing
+ * weaknesses for the topic, and writes the result — insert if novel,
+ * increment if it matches. Runs detached from the turn (see handleTurn):
+ * callers fire this without awaiting it and stash the returned promise so the
+ * reply stream never waits on it.
+ */
+async function runMisconceptionPipeline(
+  deps: ConversationDeps,
+  args: {
+    studentId: string;
+    topicId: string;
+    topicName: string;
+    question: string;
+    correctAnswer: string | null;
+    studentAnswer: string;
+  },
+): Promise<void> {
+  const description = await classifyMisconception(
+    {
+      question: args.question,
+      correctAnswer: args.correctAnswer,
+      studentAnswer: args.studentAnswer,
+      topicId: args.topicId,
+      topicName: args.topicName,
+    },
+    deps.anthropic,
+  );
+  if (!description) return;
+
+  const existing = await getWeaknessesForTopic(deps.supabase, args.studentId, args.topicId);
+  const match = await matchWeakness(existing, description, deps.anthropic);
+  if (match === "novel") {
+    await insertWeakness(deps.supabase, args.studentId, args.topicId, description);
+  } else {
+    await incrementWeakness(deps.supabase, match.id);
+  }
+
+  console.log(
+    `[misconception] topic=${args.topicId} result=${match === "novel" ? "inserted" : `incremented(${match.id})`}`,
+  );
 }
 
 function streamReply(
@@ -173,6 +229,7 @@ export async function handleTurn(
 
   // 3. Side effects.
   let misconceptionFired = false;
+  let misconceptionPromise: Promise<void> | null = null;
   if (
     (event?.type === "GAP_ATTEMPT" || event?.type === "SOLVE_ATTEMPT") &&
     !event.correct
@@ -191,22 +248,20 @@ export async function handleTurn(
         state.phase === "gap_check"
           ? (currentGap(state)?.topicId ?? "")
           : (problem.tops[0] ?? "");
-      const misconception = await classifyMisconception(
-        {
-          question,
-          correctAnswer: state.phase === "gap_check" ? null : problem.correctAnswer,
-          studentAnswer: studentMessage,
-          topicId,
-          topicName: profile.topicMasteryScores[topicId]?.name ?? "",
-        },
-        deps.anthropic,
-      );
-      // Visibility until the dedup + persistence path lands — the result
-      // isn't written anywhere yet, so this is the only record of it today.
-      console.log(
-        `[misconception] topic=${topicId} phase=${state.phase} result=${misconception ?? "null"}`,
-      );
       misconceptionFired = true;
+      // Detached: never awaited here, so a slow or failing classify→dedup→write
+      // chain never delays the reply stream below. The route hands this promise
+      // to after() so it still resolves before the request lifecycle ends.
+      misconceptionPromise = runMisconceptionPipeline(deps, {
+        studentId: profile.student.id,
+        topicId,
+        topicName: profile.topicMasteryScores[topicId]?.name ?? "",
+        question,
+        correctAnswer: state.phase === "gap_check" ? null : problem.correctAnswer,
+        studentAnswer: studentMessage,
+      }).catch((err) => {
+        console.error(`[misconception] pipeline failed for topic=${topicId}:`, err);
+      });
     }
   }
 
@@ -258,6 +313,7 @@ export async function handleTurn(
     event,
     judged,
     misconceptionFired,
+    misconceptionPromise,
     masteryUpdated,
     stream,
   };
