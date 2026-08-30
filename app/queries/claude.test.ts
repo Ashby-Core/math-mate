@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import Anthropic from "@anthropic-ai/sdk";
-import { classifyMisconception, MisconceptionInput } from "./claude";
+import type { UUID } from "crypto";
+import { classifyMisconception, matchWeakness, MisconceptionInput } from "./claude";
+import { TopicWeakness } from "@/app/types";
 
 // Real Haiku classification. Uses a fake Anthropic client (same pattern as
 // judge.test.ts) so no live API calls happen in tests.
@@ -111,5 +113,103 @@ describe("classifyMisconception", () => {
     expect(message.content).toContain(
       "not given — use your own knowledge of the topic",
     );
+  });
+});
+
+describe("matchWeakness", () => {
+  const existing: TopicWeakness[] = [
+    {
+      id: "w1" as UUID,
+      topicId: "t1" as UUID,
+      name: "Adding Fractions",
+      description: "adds numerators and denominators separately",
+      observedCount: 1,
+      lastObserved: Date.parse("2026-06-01T00:00:00Z"),
+    },
+    {
+      id: "w2" as UUID,
+      topicId: "t1" as UUID,
+      name: "Adding Fractions",
+      description: "forgets to simplify the final answer",
+      observedCount: 1,
+      lastObserved: Date.parse("2026-06-01T00:00:00Z"),
+    },
+  ];
+
+  function makeAnthropic(responseText: string | null) {
+    const create = vi.fn(async () => ({
+      content: responseText ? [{ type: "text", text: responseText }] : [],
+    }));
+    return { anthropic: { messages: { create } } as unknown as Anthropic, create };
+  }
+
+  it("returns the matching existing id for an exact paraphrase", async () => {
+    const { anthropic } = makeAnthropic(JSON.stringify({ matchIndex: 0 }));
+
+    const result = await matchWeakness(
+      existing,
+      "adds the tops and bottoms of each fraction independently",
+      anthropic,
+    );
+
+    expect(result).toEqual({ id: "w1" });
+  });
+
+  it("returns novel for an unrelated candidate", async () => {
+    const { anthropic } = makeAnthropic(JSON.stringify({ matchIndex: null }));
+
+    const result = await matchWeakness(existing, "divides instead of multiplying", anthropic);
+
+    expect(result).toBe("novel");
+  });
+
+  it("returns novel with no API call when there are no existing weaknesses", async () => {
+    const { anthropic, create } = makeAnthropic(JSON.stringify({ matchIndex: null }));
+
+    const result = await matchWeakness([], "adds numerators and denominators separately", anthropic);
+
+    expect(result).toBe("novel");
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it("returns novel on malformed JSON, and logs it", async () => {
+    const { anthropic } = makeAnthropic("not json");
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const result = await matchWeakness(existing, "adds numerators and denominators separately", anthropic);
+
+    expect(result).toBe("novel");
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+    errorSpy.mockRestore();
+  });
+
+  it("returns novel when no text block is returned", async () => {
+    const { anthropic } = makeAnthropic(null);
+
+    const result = await matchWeakness(existing, "adds numerators and denominators separately", anthropic);
+
+    expect(result).toBe("novel");
+  });
+
+  it("returns novel instead of throwing when the API call fails, and logs it", async () => {
+    const create = vi.fn(async () => {
+      throw new Error("rate limited");
+    });
+    const anthropic = { messages: { create } } as unknown as Anthropic;
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const result = await matchWeakness(existing, "adds numerators and denominators separately", anthropic);
+
+    expect(result).toBe("novel");
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+    errorSpy.mockRestore();
+  });
+
+  it("returns novel when the model returns an out-of-range index", async () => {
+    const { anthropic } = makeAnthropic(JSON.stringify({ matchIndex: 7 }));
+
+    const result = await matchWeakness(existing, "adds numerators and denominators separately", anthropic);
+
+    expect(result).toBe("novel");
   });
 });

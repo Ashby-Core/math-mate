@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { MISCONCEPTION_MODEL } from "@/app/tutor/constants";
+import { MISCONCEPTION_MODEL, WEAKNESS_MATCH_CRITERION } from "@/app/tutor/constants";
 import { DESCRIPTION_MAX } from "@/app/queries/weaknesses";
+import { TopicWeakness } from "@/app/types";
 
 // Claude-backed inference that feeds the student knowledge profile. On every
 // wrong answer, the tutoring conversation handler calls this to classify
@@ -66,6 +67,79 @@ The key judgment call: distinguish a careless slip from a real misconception, us
 You cannot see the student's work, so if the wrong value is equally consistent with a slip and a misconception, return null. Only report a misconception when the question and values clearly point to one specific, describable misunderstanding.
 
 Respond using the required structured format only.`;
+}
+
+const MATCH_SCHEMA = {
+  type: "object",
+  properties: {
+    matchIndex: {
+      anyOf: [{ type: "integer" }, { type: "null" }],
+      description:
+        "The index (from the numbered list) of the existing misconception that is the same underlying error as the candidate. null if none of them match.",
+    },
+  },
+  required: ["matchIndex"],
+  additionalProperties: false,
+} as const;
+
+function matchSystemPrompt(existing: TopicWeakness[]): string {
+  const list = existing
+    .map((w, i) => `${i}. ${w.description}`)
+    .join("\n");
+
+  return `You are deduplicating misconceptions in a student's math knowledge profile.
+
+A candidate misconception (in the user message) was just inferred from a wrong answer. Decide whether it describes ${WEAKNESS_MATCH_CRITERION} as one of the student's existing recorded misconceptions for this topic, listed below:
+
+${list}
+
+If it matches one of them, return its index. If it's a distinct misconception — even if related to the same topic — return null.
+
+Respond using the required structured format only.`;
+}
+
+/**
+ * Decides whether a newly classified misconception is the same as one of the
+ * student's existing recorded weaknesses for the topic, or a novel one.
+ *
+ * Skips the Haiku call entirely when there's nothing to match against (a
+ * cost/latency guard — every call here already follows a classification call
+ * that found a genuine misconception, so an empty list is common on a
+ * student's first observed weakness for a topic).
+ *
+ * Returns `"novel"` — never throws — on any failure (API error, malformed
+ * response, or an out-of-range index), the same "never let a flaky model
+ * corrupt state" bias as classifyMisconception: worst case is a possible
+ * duplicate row, which is an accepted failure mode elsewhere in this
+ * pipeline.
+ */
+export async function matchWeakness(
+  existing: TopicWeakness[],
+  candidate: string,
+  anthropic: Anthropic,
+): Promise<{ id: string } | "novel"> {
+  if (existing.length === 0) return "novel";
+
+  try {
+    const response = await anthropic.messages.create({
+      model: MISCONCEPTION_MODEL,
+      max_tokens: 128,
+      system: matchSystemPrompt(existing),
+      messages: [{ role: "user", content: candidate }],
+      output_config: { format: { type: "json_schema", schema: MATCH_SCHEMA } },
+    });
+
+    const text = response.content.find((b) => b.type === "text")?.text;
+    if (!text) return "novel";
+
+    const parsed = JSON.parse(text) as { matchIndex: number | null };
+    if (parsed.matchIndex == null) return "novel";
+    const match = existing[parsed.matchIndex];
+    return match ? { id: match.id } : "novel";
+  } catch (error) {
+    console.error("Error matching weakness:", error);
+    return "novel";
+  }
 }
 
 /**
