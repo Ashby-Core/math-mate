@@ -6,8 +6,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Math Mate is an AI math-tutoring platform. Students work assignment problems through a Claude-powered tutor that (1) probes prerequisite topics that are weak ("gaps"), (2) resolves each gap with a mini-lesson, then (3) scaffolds the student through the problem without ever handing over the answer. Wrong answers are meant to feed inferred misconceptions back into the student's knowledge profile (Milestone 5, not yet built).
 
-`TICKETS.md` is the authoritative roadmap and design record — it tracks milestones, per-ticket scope, and the resolved design decisions (gap threshold, mastery scale, session-persistence strategy, etc.). Read it before starting non-trivial work; update checkboxes when you complete a ticket.
-
 ## Commands
 
 ```bash
@@ -62,7 +60,7 @@ This is the core. No HTTP, no direct DB — the Anthropic and Supabase clients a
 Server-component pages under `app/dashboard`, `app/courses`, `app/login`, etc.; shared shadcn/Radix primitives in `app/components/ui/`; Recharts for mastery charts. The tutoring UI (Milestone 4, `FE-*` tickets) is not built yet.
 
 ## Conventions worth knowing
-- **Never reference ticket names/IDs (e.g. `FE-1`, `TS-3`) in code or comments.** Tickets live in `TICKETS.md`; code comments should describe behavior, not roadmap provenance.
+- **Never reference ticket names/IDs (e.g. `FE-1`, `TS-3`) in code or comments.** Code comments should describe behavior, not roadmap provenance.
 - **Branch naming:**
   - Feature: `feat/<TICKET-ID>-short-description` (e.g. `feat/FE-1-split-layout-shell`)
   - Bug fix: `fix/short-description`
