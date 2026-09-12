@@ -121,10 +121,18 @@ export class RedisHistoryCache implements HistoryCache {
   }
 }
 
-/** Process-wide cache singleton used by the API routes. */
-export const historyCache: HistoryCache = new InMemoryHistoryCache();
+function createHistoryCache(): HistoryCache {
+  if (UPSTASH_REDIS_URL && UPSTASH_REDIS_REST_TOKEN) {
+    return new RedisHistoryCache(
+      new Redis({ url: UPSTASH_REDIS_URL, token: UPSTASH_REDIS_REST_TOKEN }),
+    );
+  }
+  console.warn(
+    "UPSTASH_REDIS_REST_URL/UPSTASH_REDIS_REST_TOKEN not set — history cache " +
+      "falling back to InMemoryHistoryCache; history will not survive a restart.",
+  );
+  return new InMemoryHistoryCache();
+}
 
-export const redisHistoryCache: HistoryCache = new RedisHistoryCache(new Redis({
-  url: UPSTASH_REDIS_URL,
-  token: UPSTASH_REDIS_REST_TOKEN,
-}));
+/** Process-wide cache singleton used by the API routes. */
+export const historyCache: HistoryCache = createHistoryCache();
