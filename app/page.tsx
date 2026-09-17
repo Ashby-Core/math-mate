@@ -1,63 +1,16 @@
-import { Button } from "@/app/components/ui/button";
-import Feature from "./Feature";
-import LandingPageNavbar from "./LandingPageNavbar";
-import Image from "next/image";
+import { redirect } from "next/navigation";
 
-export default function Home() {
-  return (
-    <div>
-      <LandingPageNavbar />
-      <div className="flex flex-1 w-full justify-center items-center px-6 py-12 gap-60">
-        <div className="max-w-2xl text-right mr-12">
-          <h1 className="text-6xl font-bold mb-6">
-            A Simpler, Personalized, Fun Way to Learn
-          </h1>
-          <Button className="py-2 px-4 rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 hover:cursor-pointer transition-colors">
-            Learn More
-          </Button>
-        </div>
-        <div>
-          <Image
-            src="https://placehold.co/600x400"
-            alt="Image"
-            width={600}
-            height={400}
-            unoptimized
-          />
-        </div>
-      </div>
-      <div>
-        <Feature
-          title="Create assignments and track student progress"
-          description="Mi tincidunt elit, id quisque ligula ac diam, amet. Vel etiam suspendisse morbi eleifend faucibus eget vestibulum felis. Dictum quis montes, sit sit. Tellus aliquam enim urna, etiam. Mauris posuere vulputate arcu amet, vitae nisi, tellus tincidunt. At feugiat sapien varius id."
-          imageOnRight={true}
-        />
-        <Feature
-          title="See all of your assignments in one place"
-          description="Mi tincidunt elit, id quisque ligula ac diam, amet. Vel etiam suspendisse morbi eleifend faucibus eget vestibulum felis. Dictum quis montes, sit sit. Tellus aliquam enim urna, etiam. Mauris posuere vulputate arcu amet, vitae nisi, tellus tincidunt. At feugiat sapien varius id."
-          imageOnRight={false}
-        />
-        <Feature
-          title="Learn topics at your own pace"
-          description="Mi tincidunt elit, id quisque ligula ac diam, amet. Vel etiam suspendisse morbi eleifend faucibus eget vestibulum felis. Dictum quis montes, sit sit. Tellus aliquam enim urna, etiam. Mauris posuere vulputate arcu amet, vitae nisi, tellus tincidunt. At feugiat sapien varius id."
-          imageOnRight={true}
-        />
-        <Feature
-          title="Use AI to practice concepts"
-          description="Mi tincidunt elit, id quisque ligula ac diam, amet. Vel etiam suspendisse morbi eleifend faucibus eget vestibulum felis. Dictum quis montes, sit sit. Tellus aliquam enim urna, etiam. Mauris posuere vulputate arcu amet, vitae nisi, tellus tincidunt. At feugiat sapien varius id."
-          imageOnRight={false}
-        />
-        <Feature
-          title="Gamify the learning process"
-          description="Mi tincidunt elit, id quisque ligula ac diam, amet. Vel etiam suspendisse morbi eleifend faucibus eget vestibulum felis. Dictum quis montes, sit sit. Tellus aliquam enim urna, etiam. Mauris posuere vulputate arcu amet, vitae nisi, tellus tincidunt. At feugiat sapien varius id."
-          imageOnRight={true}
-        />
-        <Feature
-          title="Know exactly what you need to work on"
-          description="Mi tincidunt elit, id quisque ligula ac diam, amet. Vel etiam suspendisse morbi eleifend faucibus eget vestibulum felis. Dictum quis montes, sit sit. Tellus aliquam enim urna, etiam. Mauris posuere vulputate arcu amet, vitae nisi, tellus tincidunt. At feugiat sapien varius id."
-          imageOnRight={false}
-        />
-      </div>
-    </div>
-  );
+import { createClient } from "@/utils/supabase/server";
+
+export default async function Home() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (user) {
+    redirect("/dashboard");
+  } else {
+    redirect("/login");
+  }
 }
