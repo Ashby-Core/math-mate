@@ -183,11 +183,15 @@ const STATUS_RANK: Record<ProblemStatus, number> = {
   abandoned: 1,
 };
 
+/** A problem's session status plus the phase it's in, for the assignment page's per-row label. */
+export type ProblemSessionState = { status: ProblemStatus; phase: Phase };
+
 /**
  * Maps each of an assignment's problems that the student has a session for to
- * its status (problemId → status). Problems with no session are simply absent
- * from the map ("not started"). Used by the assignment page to label each
- * problem's CTA (Start / Continue / Review).
+ * its status and phase (problemId → { status, phase }). Problems with no
+ * session are simply absent from the map ("not started"). Used by the
+ * assignment page to label each problem's tutoring phase (Not started / Gap
+ * check / Solve / Completed).
  *
  * Sessions link to a problem, not an assignment, so this filters via an inner
  * join to `problems` on `assignment_id`.
@@ -196,10 +200,10 @@ export async function getSessionStatusesByAssignment(
   supabase: SupabaseClient,
   studentId: string,
   assignmentId: string,
-): Promise<Record<string, ProblemStatus>> {
+): Promise<Record<string, ProblemSessionState>> {
   const { data, error } = await supabase
     .from("tutoring_sessions")
-    .select("problem_id, status, problems!inner(assignment_id)")
+    .select("problem_id, status, phase, problems!inner(assignment_id)")
     .eq("student_id", studentId)
     .eq("problems.assignment_id", assignmentId);
 
@@ -208,12 +212,12 @@ export async function getSessionStatusesByAssignment(
     return {};
   }
 
-  const statuses: Record<string, ProblemStatus> = {};
+  const statuses: Record<string, ProblemSessionState> = {};
   for (const row of data) {
     const status = row.status as ProblemStatus;
     const current = statuses[row.problem_id];
-    if (!current || STATUS_RANK[status] > STATUS_RANK[current]) {
-      statuses[row.problem_id] = status;
+    if (!current || STATUS_RANK[status] > STATUS_RANK[current.status]) {
+      statuses[row.problem_id] = { status, phase: row.phase as Phase };
     }
   }
   return statuses;

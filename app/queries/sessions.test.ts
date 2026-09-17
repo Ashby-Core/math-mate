@@ -6,6 +6,7 @@ import {
   getActiveSession,
   getResumableSession,
   getSessionById,
+  getSessionStatusesByAssignment,
   setCompletionSummary,
   updateSessionState,
 } from "./sessions";
@@ -218,6 +219,52 @@ describe("createSession", () => {
     expect(
       await createSession(client, { studentId: "u1", problemId: "p1", state }),
     ).toBeNull();
+  });
+});
+
+describe("getSessionStatusesByAssignment", () => {
+  it("returns an empty map when the student has no sessions in the assignment", async () => {
+    const { client } = fakeSupabase({ data: [], error: null });
+    expect(await getSessionStatusesByAssignment(client, "u1", "a1")).toEqual(
+      {},
+    );
+  });
+
+  it("returns null on error", async () => {
+    const { client } = fakeSupabase({
+      data: null,
+      error: { message: "boom" },
+    });
+    expect(await getSessionStatusesByAssignment(client, "u1", "a1")).toEqual(
+      {},
+    );
+  });
+
+  it("maps each problem to its status and phase", async () => {
+    const { client } = fakeSupabase({
+      data: [
+        { problem_id: "p1", status: "completed", phase: "review" },
+        { problem_id: "p2", status: "active", phase: "gap_check" },
+      ],
+      error: null,
+    });
+    expect(await getSessionStatusesByAssignment(client, "u1", "a1")).toEqual({
+      p1: { status: "completed", phase: "review" },
+      p2: { status: "active", phase: "gap_check" },
+    });
+  });
+
+  it("keeps the phase of the highest-ranked status when a problem has multiple rows", async () => {
+    const { client } = fakeSupabase({
+      data: [
+        { problem_id: "p1", status: "abandoned", phase: "gap_check" },
+        { problem_id: "p1", status: "completed", phase: "review" },
+      ],
+      error: null,
+    });
+    expect(await getSessionStatusesByAssignment(client, "u1", "a1")).toEqual({
+      p1: { status: "completed", phase: "review" },
+    });
   });
 });
 
