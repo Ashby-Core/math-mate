@@ -14,7 +14,7 @@ Math Mate is an AI math-tutoring platform. Students work assignment problems thr
 npm run dev          # Next.js dev server (localhost:3000)
 npm run build        # production build
 npm run lint         # next lint (eslint 9)
-npm test             # vitest run (all *.test.ts under app/ and lib/)
+npm test             # vitest run (all *.test.ts under app/, lib/, and utils/)
 npm run test:watch   # vitest watch mode
 ```
 
