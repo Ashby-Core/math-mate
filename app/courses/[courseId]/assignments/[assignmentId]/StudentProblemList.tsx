@@ -1,10 +1,11 @@
 import Link from "next/link";
-import { CheckCircle2, FileQuestion, Lock } from "lucide-react";
+import { CheckCircle2, Lock } from "lucide-react";
 
 import { ProblemListItem } from "@/app/types";
 import { ProblemSessionState } from "@/app/queries/sessions";
 import { getProblemCtaLabel, getProblemPhaseLabel } from "@/app/tutor/assignmentProgress";
 import { Card, CardContent } from "@/app/components/ui/card";
+import EmptyProblemList from "@/app/courses/[courseId]/assignments/[assignmentId]/EmptyProblemList";
 
 interface StudentProblemListProps {
   problems: ProblemListItem[];
@@ -20,16 +21,7 @@ const StudentProblemList = ({
   activeProblemId,
 }: StudentProblemListProps) => {
   if (problems.length === 0) {
-    return (
-      <div className="text-center py-8">
-        <div className="text-gray-400 mb-3">
-          <FileQuestion className="w-12 h-12 mx-auto" />
-        </div>
-        <p className="text-gray-500 text-sm">
-          No problems in this assignment yet
-        </p>
-      </div>
-    );
+    return <EmptyProblemList />;
   }
 
   return (

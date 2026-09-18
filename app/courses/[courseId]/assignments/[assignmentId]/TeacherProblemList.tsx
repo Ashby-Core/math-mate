@@ -1,7 +1,8 @@
-import { CircleCheck, CircleHelp, FileQuestion } from "lucide-react";
+import { CircleCheck, CircleHelp } from "lucide-react";
 
 import { TeacherProblemListItem } from "@/app/types";
 import { Card, CardContent } from "@/app/components/ui/card";
+import EmptyProblemList from "@/app/courses/[courseId]/assignments/[assignmentId]/EmptyProblemList";
 
 interface TeacherProblemListProps {
   problems: TeacherProblemListItem[];
@@ -9,16 +10,7 @@ interface TeacherProblemListProps {
 
 const TeacherProblemList = ({ problems }: TeacherProblemListProps) => {
   if (problems.length === 0) {
-    return (
-      <div className="text-center py-8">
-        <div className="text-gray-400 mb-3">
-          <FileQuestion className="w-12 h-12 mx-auto" />
-        </div>
-        <p className="text-gray-500 text-sm">
-          No problems in this assignment yet
-        </p>
-      </div>
-    );
+    return <EmptyProblemList />;
   }
 
   return (
