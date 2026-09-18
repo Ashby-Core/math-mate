@@ -43,17 +43,15 @@ const Assignments = ({ assignments, userIsTeacher }: AssignmentsProps) => {
                     <CardTitle className="text-gray-900">
                       {assignment.title}
                     </CardTitle>
-                    {!userIsTeacher && (
-                      <CardAction>
-                        <Button asChild size="sm" variant="outline">
-                          <Link
-                            href={`/courses/${assignment.courseId}/assignments/${assignment.id}`}
-                          >
-                            View Problems
-                          </Link>
-                        </Button>
-                      </CardAction>
-                    )}
+                    <CardAction>
+                      <Button asChild size="sm" variant="outline">
+                        <Link
+                          href={`/courses/${assignment.courseId}/assignments/${assignment.id}`}
+                        >
+                          View Problems
+                        </Link>
+                      </Button>
+                    </CardAction>
                   </CardHeader>
                   <CardContent>
                     <div className="flex items-center space-x-4 text-xs text-gray-500">
