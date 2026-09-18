@@ -1,10 +1,16 @@
 import { ProblemListItem } from "@/app/types";
 import { ProblemSessionState } from "@/app/queries/sessions";
 
-// Pure display logic for the assignment problems page: which problem is
-// "current" (unlocked) and what phase label each row shows. Server-side
-// enforcement of the sequential rule is a separate concern — this only
-// decides what the list renders.
+// Pure logic for the sequential-unlock rule: which problem is "current"
+// (unlocked) and what phase label each row shows. `getActiveProblemId` is the
+// single source of truth for the rule itself — it's used both for display
+// (the assignment problems page) and as the actual server-side enforcement
+// gate (via `app/tutor/problemLock.ts`, consumed by `POST /api/sessions` and
+// `/tutor/[problemId]`). Being pure, it has no way to tell "no sessions yet"
+// apart from "the statuses query failed"; callers doing enforcement must pass
+// in problems/statuses that have already been checked for fetch failure
+// (see problemLock.ts) rather than relying on the query layer's display-only
+// empty-array/empty-object defaults.
 
 export type ProblemPhaseLabel = "Not started" | "Gap check" | "Solve" | "Completed";
 
