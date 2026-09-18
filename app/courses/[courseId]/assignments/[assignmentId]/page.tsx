@@ -6,6 +6,7 @@ import StudentProblemList from "@/app/courses/[courseId]/assignments/[assignment
 import TeacherProblemList from "@/app/courses/[courseId]/assignments/[assignmentId]/TeacherProblemList";
 import { requireUser } from "@/app/queries/auth";
 import { getAssignmentById } from "@/app/queries/assignments";
+import { getCourseById } from "@/app/queries/courses";
 import {
   getProblemsByAssignment,
   getProblemsByAssignmentForTeacher,
@@ -34,8 +35,16 @@ export default async function AssignmentPage({
   }
 
   // Session state is scoped to a single student, so a teacher gets a read-only
-  // view of the problems themselves (question + answer) instead.
+  // view of the problems themselves (question + answer) instead. That view
+  // exposes correctAnswer, so it's gated on actually teaching this course —
+  // courses/assignments/problems have no RLS of their own to fall back on.
   const isTeacher = profile?.userRole === "teacher";
+  if (isTeacher) {
+    const course = await getCourseById(supabase, assignment.courseId);
+    if (course?.teacher !== user.id) {
+      notFound();
+    }
+  }
 
   let problemsSection: ReactNode;
   if (isTeacher) {
