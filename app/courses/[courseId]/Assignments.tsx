@@ -1,4 +1,5 @@
 import React from "react";
+import Link from "next/link";
 import AddAssignment from "./AddAssignment";
 import { Assignment } from "@/app/types";
 import {
@@ -8,6 +9,7 @@ import {
   CardAction,
   CardContent,
 } from "@/app/components/ui/card";
+import { Button } from "@/app/components/ui/button";
 import { Newspaper } from "lucide-react";
 
 interface AssignmentsProps {
@@ -37,10 +39,23 @@ const Assignments = ({ assignments, userIsTeacher }: AssignmentsProps) => {
                   size="sm"
                   className="hover:bg-muted/50 transition-colors"
                 >
-                  <CardContent>
-                    <h3 className="font-medium text-gray-900 mb-1">
+                  <CardHeader>
+                    <CardTitle className="text-gray-900">
                       {assignment.title}
-                    </h3>
+                    </CardTitle>
+                    {!userIsTeacher && (
+                      <CardAction>
+                        <Button asChild size="sm" variant="outline">
+                          <Link
+                            href={`/courses/${assignment.courseId}/assignments/${assignment.id}`}
+                          >
+                            View Problems
+                          </Link>
+                        </Button>
+                      </CardAction>
+                    )}
+                  </CardHeader>
+                  <CardContent>
                     <div className="flex items-center space-x-4 text-xs text-gray-500">
                       <span>
                         Created:{" "}
