@@ -2,14 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import type Anthropic from "@anthropic-ai/sdk";
 import { Problem, StudentProfile } from "@/app/types";
 import { requireUserApi } from "@/app/queries/auth";
-import { getProblemById } from "@/app/queries/problems";
+import { getProblemById, getProblemsByAssignment } from "@/app/queries/problems";
 import { isStudentEnrolled } from "@/app/queries/enrollments";
 import { buildProfile } from "@/app/queries/profile";
 import {
   createSession,
   getActiveSession,
   getResumableSession,
+  getSessionStatusesByAssignment,
 } from "@/app/queries/sessions";
+import { getActiveProblemId } from "@/app/tutor/assignmentProgress";
 import { getAnthropic } from "@/app/tutor/anthropic";
 import { openSession, SESSION_SEED_MESSAGE } from "@/app/tutor/conversation";
 import {
@@ -99,6 +101,21 @@ export async function POST(req: NextRequest) {
             : []
           : ((await historyCache.get(resumable.id)) ?? []);
       return sessionJson({ sessionId: resumable.id, state, profile, problem, history });
+    }
+
+    // No active/completed session for this problem yet — reject bootstrapping
+    // one out of order. Resolved against the assignment's siblings server-side
+    // rather than trusting anything client-supplied about ordering.
+    const [siblingProblems, siblingStatuses] = await Promise.all([
+      getProblemsByAssignment(supabase, found.assignmentId),
+      getSessionStatusesByAssignment(supabase, user.id, found.assignmentId),
+    ]);
+    const activeProblemId = getActiveProblemId(siblingProblems, siblingStatuses);
+    if (activeProblemId !== null && activeProblemId !== problemId) {
+      return NextResponse.json(
+        { error: "This problem is locked until you finish the previous ones." },
+        { status: 403 },
+      );
     }
 
     // Create a fresh session. Generate the greeting FIRST so a Claude failure

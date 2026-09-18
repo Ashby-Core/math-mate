@@ -7,10 +7,12 @@ import { SESSION_SEED_MESSAGE } from "@/app/tutor/conversation";
 const m = vi.hoisted(() => ({
   requireUserApi: vi.fn(),
   getProblemById: vi.fn(),
+  getProblemsByAssignment: vi.fn(),
   isStudentEnrolled: vi.fn(),
   buildProfile: vi.fn(),
   getActiveSession: vi.fn(),
   getResumableSession: vi.fn(),
+  getSessionStatusesByAssignment: vi.fn(),
   createSession: vi.fn(),
   openSession: vi.fn(),
   getAnthropic: vi.fn(() => ({})),
@@ -19,7 +21,10 @@ const m = vi.hoisted(() => ({
 }));
 
 vi.mock("@/app/queries/auth", () => ({ requireUserApi: m.requireUserApi }));
-vi.mock("@/app/queries/problems", () => ({ getProblemById: m.getProblemById }));
+vi.mock("@/app/queries/problems", () => ({
+  getProblemById: m.getProblemById,
+  getProblemsByAssignment: m.getProblemsByAssignment,
+}));
 vi.mock("@/app/queries/enrollments", () => ({
   isStudentEnrolled: m.isStudentEnrolled,
 }));
@@ -27,6 +32,7 @@ vi.mock("@/app/queries/profile", () => ({ buildProfile: m.buildProfile }));
 vi.mock("@/app/queries/sessions", () => ({
   getActiveSession: m.getActiveSession,
   getResumableSession: m.getResumableSession,
+  getSessionStatusesByAssignment: m.getSessionStatusesByAssignment,
   createSession: m.createSession,
 }));
 vi.mock("@/app/tutor/anthropic", () => ({ getAnthropic: m.getAnthropic }));
@@ -76,11 +82,16 @@ const greetingStream = {
 beforeEach(() => {
   vi.clearAllMocks();
   m.requireUserApi.mockResolvedValue({ supabase: {}, user: { id: "u1" } });
-  m.getProblemById.mockResolvedValue({ problem, courseId: "c1" });
+  m.getProblemById.mockResolvedValue({ problem, courseId: "c1", assignmentId: "a1" });
   m.isStudentEnrolled.mockResolvedValue(true);
   m.buildProfile.mockResolvedValue(profile);
   m.getActiveSession.mockResolvedValue(null);
   m.getResumableSession.mockResolvedValue(null);
+  // Default: p1 is the assignment's only/earliest problem, so it's unlocked.
+  m.getProblemsByAssignment.mockResolvedValue([
+    { id: "p1", orderIndex: 0, topics: [] },
+  ]);
+  m.getSessionStatusesByAssignment.mockResolvedValue({});
   m.createSession.mockResolvedValue({ id: "sess-new" });
   m.openSession.mockResolvedValue({ stream: greetingStream });
   m.cacheGet.mockResolvedValue(null);
@@ -150,6 +161,48 @@ describe("POST /api/sessions — create", () => {
     expect(m.cacheSet).not.toHaveBeenCalled();
   });
 
+  it("403 when the problem is locked (an earlier sibling isn't completed)", async () => {
+    m.getProblemsByAssignment.mockResolvedValue([
+      { id: "p1", orderIndex: 0, topics: [] },
+      { id: "p2", orderIndex: 1, topics: [] },
+    ]);
+    m.getSessionStatusesByAssignment.mockResolvedValue({}); // p1 not completed
+
+    const res = await POST(makeReq({ problemId: "p2" }));
+    expect(res.status).toBe(403);
+    expect(m.openSession).not.toHaveBeenCalled();
+    expect(m.createSession).not.toHaveBeenCalled();
+  });
+
+  it("allows bootstrapping the earliest incomplete sibling", async () => {
+    m.getProblemsByAssignment.mockResolvedValue([
+      { id: "p1", orderIndex: 0, topics: [] },
+      { id: "p2", orderIndex: 1, topics: [] },
+    ]);
+    m.getSessionStatusesByAssignment.mockResolvedValue({});
+
+    const res = await POST(makeReq({ problemId: "p1" }));
+    expect(res.status).toBe(200);
+  });
+
+  it("unlocks the next sibling once the earlier one is completed", async () => {
+    m.getProblemById.mockResolvedValue({
+      problem: { ...problem, id: "p2" },
+      courseId: "c1",
+      assignmentId: "a1",
+    });
+    m.getProblemsByAssignment.mockResolvedValue([
+      { id: "p1", orderIndex: 0, topics: [] },
+      { id: "p2", orderIndex: 1, topics: [] },
+    ]);
+    m.getSessionStatusesByAssignment.mockResolvedValue({
+      p1: { status: "completed", phase: "review" },
+    });
+
+    const res = await POST(makeReq({ problemId: "p2" }));
+    expect(res.status).toBe(200);
+  });
+
   it("falls back to resume when the create races (unique conflict)", async () => {
     m.createSession.mockResolvedValue({ conflict: true });
     m.getResumableSession.mockResolvedValue(null); // initial lookup: nothing to resume
@@ -196,6 +249,8 @@ describe("POST /api/sessions — resume", () => {
     expect(json.phase).toBe("gap_check");
     expect(m.openSession).not.toHaveBeenCalled();
     expect(m.createSession).not.toHaveBeenCalled();
+    // Bypasses the lock check entirely — resuming never re-derives siblings.
+    expect(m.getProblemsByAssignment).not.toHaveBeenCalled();
     expect(json.messages).toEqual([
       { role: "assistant", content: "Earlier greeting" },
       { role: "user", content: "3/8" },
