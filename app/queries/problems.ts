@@ -1,6 +1,6 @@
 import { SupabaseClient } from "@supabase/supabase-js";
 import { UUID } from "crypto";
-import { Problem, ProblemListItem } from "@/app/types";
+import { Problem, ProblemListItem, TeacherProblemListItem } from "@/app/types";
 
 // PostgREST returns a to-one embed (e.g. assignments(course)) as an object at
 // runtime but supabase-js types it as an array. Normalize across both.
@@ -68,6 +68,43 @@ function embeddedTopic(topics: unknown): { id: UUID; name: string } | null {
   return (t as { id: UUID; name: string } | null) ?? null;
 }
 
+/** Maps a `problems_topics(topics(id, name))` join into named topics, dropping any without a resolvable topic. */
+function namedTopics(
+  problemsTopics: { topics: unknown }[] | null,
+): { id: UUID; name: string }[] {
+  return (problemsTopics ?? []).flatMap((pt) => {
+    const topic = embeddedTopic(pt.topics);
+    return topic ? [{ id: topic.id, name: topic.name }] : [];
+  });
+}
+
+/**
+ * Shared row fetch behind both assignment problem lists: selects `columns`
+ * from `problems` for the assignment, ordered by `order_index`. `columns` is
+ * generic (rather than typed `string`) so its literal value still flows into
+ * supabase-js's select-string parsing — widening it to `string` would erase
+ * row typing and force casts in every caller. Returns `null` on error so
+ * callers can each report their own empty-array default.
+ */
+async function fetchProblemsByAssignment<Columns extends string>(
+  supabase: SupabaseClient,
+  assignmentId: string,
+  columns: Columns,
+) {
+  const { data, error } = await supabase
+    .from("problems")
+    .select(columns)
+    .eq("assignment_id", assignmentId)
+    .order("order_index", { ascending: true });
+
+  if (error || !data) {
+    console.error("Error fetching problems for assignment:", error?.message);
+    return null;
+  }
+
+  return data;
+}
+
 /**
  * Lists the problems in an assignment for a student-facing problem list,
  * ordered by `order_index`. Each item carries only its id, order, and named
@@ -82,23 +119,46 @@ export async function getProblemsByAssignment(
   supabase: SupabaseClient,
   assignmentId: string,
 ): Promise<ProblemListItem[]> {
-  const { data, error } = await supabase
-    .from("problems")
-    .select("id, order_index, problems_topics(topics(id, name))")
-    .eq("assignment_id", assignmentId)
-    .order("order_index", { ascending: true });
-
-  if (error || !data) {
-    console.error("Error fetching problems for assignment:", error?.message);
-    return [];
-  }
+  const data = await fetchProblemsByAssignment(
+    supabase,
+    assignmentId,
+    "id, order_index, problems_topics(topics(id, name))",
+  );
+  if (!data) return [];
 
   return data.map((row) => ({
     id: row.id,
     orderIndex: row.order_index,
-    topics: (row.problems_topics ?? []).flatMap((pt) => {
-      const topic = embeddedTopic(pt.topics);
-      return topic ? [{ id: topic.id, name: topic.name }] : [];
-    }),
+    topics: namedTopics(row.problems_topics),
+  }));
+}
+
+/**
+ * Lists the problems in an assignment for a teacher-facing problem list,
+ * ordered by `order_index`. Unlike `getProblemsByAssignment`, this includes
+ * `question_content` and `correct_answer` — a teacher already has both from
+ * authoring the assignment, so the student-facing firewall doesn't apply here.
+ *
+ * @param supabase the Supabase client
+ * @param assignmentId the assignment whose problems to list
+ * @returns the problems with full content, or an empty array on error
+ */
+export async function getProblemsByAssignmentForTeacher(
+  supabase: SupabaseClient,
+  assignmentId: string,
+): Promise<TeacherProblemListItem[]> {
+  const data = await fetchProblemsByAssignment(
+    supabase,
+    assignmentId,
+    "id, question_content, correct_answer, order_index, problems_topics(topics(id, name))",
+  );
+  if (!data) return [];
+
+  return data.map((row) => ({
+    id: row.id,
+    orderIndex: row.order_index,
+    questionContent: row.question_content,
+    correctAnswer: row.correct_answer,
+    topics: namedTopics(row.problems_topics),
   }));
 }

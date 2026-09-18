@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { getProblemById } from "./problems";
+import { fakeSupabase as fakeChainSupabase } from "./testSupabase";
+import { getProblemById, getProblemsByAssignmentForTeacher } from "./problems";
 
 // Minimal fake of the supabase query chain `.from().select().eq().single()`.
 function fakeSupabase(result: { data: unknown; error: unknown }) {
@@ -56,5 +57,56 @@ describe("getProblemById", () => {
       error: null,
     });
     expect(await getProblemById(supabase, "p1")).toBeNull();
+  });
+});
+
+describe("getProblemsByAssignmentForTeacher", () => {
+  it("maps rows to full-content items with named topics, in order", async () => {
+    const { client } = fakeChainSupabase({
+      data: [
+        {
+          id: "p1",
+          question_content: "What is 3/4 + 1/8?",
+          correct_answer: "7/8",
+          order_index: 0,
+          problems_topics: [{ topics: { id: "t1", name: "Fractions" } }],
+        },
+        {
+          id: "p2",
+          question_content: "What is 10 / 2?",
+          correct_answer: "5",
+          order_index: 1,
+          problems_topics: [],
+        },
+      ],
+      error: null,
+    });
+
+    expect(
+      await getProblemsByAssignmentForTeacher(client, "a1"),
+    ).toEqual([
+      {
+        id: "p1",
+        orderIndex: 0,
+        questionContent: "What is 3/4 + 1/8?",
+        correctAnswer: "7/8",
+        topics: [{ id: "t1", name: "Fractions" }],
+      },
+      {
+        id: "p2",
+        orderIndex: 1,
+        questionContent: "What is 10 / 2?",
+        correctAnswer: "5",
+        topics: [],
+      },
+    ]);
+  });
+
+  it("returns an empty array on error", async () => {
+    const { client } = fakeChainSupabase({
+      data: null,
+      error: { message: "boom" },
+    });
+    expect(await getProblemsByAssignmentForTeacher(client, "a1")).toEqual([]);
   });
 });
