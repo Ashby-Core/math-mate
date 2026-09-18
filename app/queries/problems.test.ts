@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { fakeSupabase as fakeChainSupabase } from "./testSupabase";
-import { getProblemById, getProblemsByAssignmentForTeacher } from "./problems";
+import {
+  getProblemById,
+  getProblemsByAssignment,
+  getProblemsByAssignmentForTeacher,
+} from "./problems";
 
 // Minimal fake of the supabase query chain `.from().select().eq().single()`.
 function fakeSupabase(result: { data: unknown; error: unknown }) {
@@ -59,6 +63,46 @@ describe("getProblemById", () => {
       error: null,
     });
     expect(await getProblemById(supabase, "p1")).toBeNull();
+  });
+});
+
+describe("getProblemsByAssignment", () => {
+  it("maps rows to lightweight items with named topics, in order, without content/answer", async () => {
+    const { client } = fakeChainSupabase({
+      data: [
+        {
+          id: "p1",
+          order_index: 0,
+          problems_topics: [{ topics: { id: "t1", name: "Fractions" } }],
+        },
+        { id: "p2", order_index: 1, problems_topics: [] },
+      ],
+      error: null,
+    });
+
+    expect(await getProblemsByAssignment(client, "a1")).toEqual([
+      { id: "p1", orderIndex: 0, topics: [{ id: "t1", name: "Fractions" }] },
+      { id: "p2", orderIndex: 1, topics: [] },
+    ]);
+  });
+
+  it("orders by order_index then id, so equal order_index values are still deterministic", async () => {
+    const { client, chains } = fakeChainSupabase({ data: [], error: null });
+    await getProblemsByAssignment(client, "a1");
+
+    const orderCalls = chains[0].order.mock.calls;
+    expect(orderCalls).toEqual([
+      ["order_index", { ascending: true }],
+      ["id", { ascending: true }],
+    ]);
+  });
+
+  it("returns null (not []) on error, so an enforcement caller can fail closed", async () => {
+    const { client } = fakeChainSupabase({
+      data: null,
+      error: { message: "boom" },
+    });
+    expect(await getProblemsByAssignment(client, "a1")).toBeNull();
   });
 });
 

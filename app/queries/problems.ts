@@ -96,7 +96,12 @@ async function fetchProblemsByAssignment<Columns extends string>(
     .from("problems")
     .select(columns)
     .eq("assignment_id", assignmentId)
-    .order("order_index", { ascending: true });
+    // `id` is a tiebreaker for equal `order_index` values (not DB-constrained
+    // to be unique) so ordering — and therefore `getActiveProblemId` — is
+    // stable across requests instead of following whatever order Postgres
+    // happens to return.
+    .order("order_index", { ascending: true })
+    .order("id", { ascending: true });
 
   if (error || !data) {
     console.error("Error fetching problems for assignment:", error?.message);
@@ -107,25 +112,32 @@ async function fetchProblemsByAssignment<Columns extends string>(
 }
 
 /**
- * Lists the problems in an assignment for a student-facing problem list,
- * ordered by `order_index`. Each item carries only its id, order, and named
- * topics — `question_content` and `correct_answer` are deliberately NOT
- * selected, so neither the problem stem nor the answer can reach the client.
+ * Lists the problems in an assignment, ordered by `order_index`. Each item
+ * carries only its id, order, and named topics — `question_content` and
+ * `correct_answer` are deliberately NOT selected, so neither the problem stem
+ * nor the answer can reach the client.
+ *
+ * Feeds both the student-facing problem list (display) and, together with
+ * `getSessionStatusesByAssignment`, the sequential-unlock gate in
+ * `app/tutor/problemLock.ts` (enforcement) — see that file for why this
+ * returns `null` rather than `[]` on error: an enforcement caller must be
+ * able to tell "no problems" apart from "the query failed" and fail closed,
+ * where a display caller can safely collapse `null` to `[]`.
  *
  * @param supabase the Supabase client
  * @param assignmentId the assignment whose problems to list
- * @returns the problems as lightweight list items, or an empty array on error
+ * @returns the problems as lightweight list items, or null on error
  */
 export async function getProblemsByAssignment(
   supabase: SupabaseClient,
   assignmentId: string,
-): Promise<ProblemListItem[]> {
+): Promise<ProblemListItem[] | null> {
   const data = await fetchProblemsByAssignment(
     supabase,
     assignmentId,
     "id, order_index, problems_topics(topics(id, name))",
   );
-  if (!data) return [];
+  if (!data) return null;
 
   return data.map((row) => ({
     id: row.id,
