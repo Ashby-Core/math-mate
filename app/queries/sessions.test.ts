@@ -230,14 +230,12 @@ describe("getSessionStatusesByAssignment", () => {
     );
   });
 
-  it("returns null on error", async () => {
+  it("returns null on error (not {}, so a caller doing enforcement can fail closed)", async () => {
     const { client } = fakeSupabase({
       data: null,
       error: { message: "boom" },
     });
-    expect(await getSessionStatusesByAssignment(client, "u1", "a1")).toEqual(
-      {},
-    );
+    expect(await getSessionStatusesByAssignment(client, "u1", "a1")).toBeNull();
   });
 
   it("maps each problem to its status and phase", async () => {
