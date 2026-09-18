@@ -11,6 +11,7 @@ const m = vi.hoisted(() => ({
   buildProfile: vi.fn(),
   getActiveSession: vi.fn(),
   getResumableSession: vi.fn(),
+  isProblemUnlocked: vi.fn(),
   createSession: vi.fn(),
   openSession: vi.fn(),
   getAnthropic: vi.fn(() => ({})),
@@ -28,6 +29,9 @@ vi.mock("@/app/queries/sessions", () => ({
   getActiveSession: m.getActiveSession,
   getResumableSession: m.getResumableSession,
   createSession: m.createSession,
+}));
+vi.mock("@/app/tutor/problemLock", () => ({
+  isProblemUnlocked: m.isProblemUnlocked,
 }));
 vi.mock("@/app/tutor/anthropic", () => ({ getAnthropic: m.getAnthropic }));
 // Keep SESSION_SEED_MESSAGE (and the rest) real; stub only openSession.
@@ -76,11 +80,12 @@ const greetingStream = {
 beforeEach(() => {
   vi.clearAllMocks();
   m.requireUserApi.mockResolvedValue({ supabase: {}, user: { id: "u1" } });
-  m.getProblemById.mockResolvedValue({ problem, courseId: "c1" });
+  m.getProblemById.mockResolvedValue({ problem, courseId: "c1", assignmentId: "a1" });
   m.isStudentEnrolled.mockResolvedValue(true);
   m.buildProfile.mockResolvedValue(profile);
   m.getActiveSession.mockResolvedValue(null);
   m.getResumableSession.mockResolvedValue(null);
+  m.isProblemUnlocked.mockResolvedValue(true);
   m.createSession.mockResolvedValue({ id: "sess-new" });
   m.openSession.mockResolvedValue({ stream: greetingStream });
   m.cacheGet.mockResolvedValue(null);
@@ -150,6 +155,35 @@ describe("POST /api/sessions — create", () => {
     expect(m.cacheSet).not.toHaveBeenCalled();
   });
 
+  // The lock rule itself (locked/unlocked/unlocks-after-completion) is
+  // covered by app/tutor/problemLock.test.ts; these just verify the route
+  // wires the gate's result to the right response.
+  it("403 when the gate reports the problem locked", async () => {
+    m.isProblemUnlocked.mockResolvedValue(false);
+
+    const res = await POST(makeReq({ problemId: "p2" }));
+    expect(res.status).toBe(403);
+    expect(m.openSession).not.toHaveBeenCalled();
+    expect(m.createSession).not.toHaveBeenCalled();
+  });
+
+  it("500s (fails closed) when the gate can't resolve assignment progress", async () => {
+    m.isProblemUnlocked.mockResolvedValue(null);
+
+    const res = await POST(makeReq({ problemId: "p1" }));
+    expect(res.status).toBe(500);
+    expect(m.openSession).not.toHaveBeenCalled();
+    expect(m.createSession).not.toHaveBeenCalled();
+  });
+
+  it("creates the session when the gate reports the problem unlocked", async () => {
+    m.isProblemUnlocked.mockResolvedValue(true);
+
+    const res = await POST(makeReq({ problemId: "p1" }));
+    expect(res.status).toBe(200);
+    expect(m.isProblemUnlocked).toHaveBeenCalledWith({}, "u1", "a1", "p1");
+  });
+
   it("falls back to resume when the create races (unique conflict)", async () => {
     m.createSession.mockResolvedValue({ conflict: true });
     m.getResumableSession.mockResolvedValue(null); // initial lookup: nothing to resume
@@ -196,6 +230,8 @@ describe("POST /api/sessions — resume", () => {
     expect(json.phase).toBe("gap_check");
     expect(m.openSession).not.toHaveBeenCalled();
     expect(m.createSession).not.toHaveBeenCalled();
+    // Bypasses the lock check entirely — resuming never re-derives siblings.
+    expect(m.isProblemUnlocked).not.toHaveBeenCalled();
     expect(json.messages).toEqual([
       { role: "assistant", content: "Earlier greeting" },
       { role: "user", content: "3/8" },

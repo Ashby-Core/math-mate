@@ -10,6 +10,7 @@ import {
   getActiveSession,
   getResumableSession,
 } from "@/app/queries/sessions";
+import { isProblemUnlocked } from "@/app/tutor/problemLock";
 import { getAnthropic } from "@/app/tutor/anthropic";
 import { openSession, SESSION_SEED_MESSAGE } from "@/app/tutor/conversation";
 import {
@@ -99,6 +100,27 @@ export async function POST(req: NextRequest) {
             : []
           : ((await historyCache.get(resumable.id)) ?? []);
       return sessionJson({ sessionId: resumable.id, state, profile, problem, history });
+    }
+
+    // No active/completed session for this problem yet — reject bootstrapping
+    // one out of order. Resolved against the assignment's siblings server-side
+    // rather than trusting anything client-supplied about ordering. `null`
+    // means a sibling/status lookup failed; thrown so the catch below turns
+    // it into a 500 instead of silently unlocking or relocking the problem.
+    const unlocked = await isProblemUnlocked(
+      supabase,
+      user.id,
+      found.assignmentId,
+      problemId,
+    );
+    if (unlocked === null) {
+      throw new Error("Could not resolve assignment progress for the lock check");
+    }
+    if (!unlocked) {
+      return NextResponse.json(
+        { error: "This problem is locked until you finish the previous ones." },
+        { status: 403 },
+      );
     }
 
     // Create a fresh session. Generate the greeting FIRST so a Claude failure

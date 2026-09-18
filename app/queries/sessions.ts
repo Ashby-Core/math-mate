@@ -191,16 +191,22 @@ export type ProblemSessionState = { status: ProblemStatus; phase: Phase };
  * its status and phase (problemId → { status, phase }). Problems with no
  * session are simply absent from the map ("not started"). Used by the
  * assignment page to label each problem's tutoring phase (Not started / Gap
- * check / Solve / Completed).
+ * check / Solve / Completed), and, together with `getProblemsByAssignment`,
+ * by the sequential-unlock gate in `app/tutor/problemLock.ts`.
  *
  * Sessions link to a problem, not an assignment, so this filters via an inner
  * join to `problems` on `assignment_id`.
+ *
+ * Returns `null` on error rather than `{}` — the gate needs to tell "no
+ * sessions yet" apart from "the query failed" (an empty map reads as no
+ * progress, which would wrongly relock an assignment the student has actually
+ * been progressing through). A display caller can collapse `null` to `{}`.
  */
 export async function getSessionStatusesByAssignment(
   supabase: SupabaseClient,
   studentId: string,
   assignmentId: string,
-): Promise<Record<string, ProblemSessionState>> {
+): Promise<Record<string, ProblemSessionState> | null> {
   const { data, error } = await supabase
     .from("tutoring_sessions")
     .select("problem_id, status, phase, problems!inner(assignment_id)")
@@ -209,7 +215,7 @@ export async function getSessionStatusesByAssignment(
 
   if (error || !data) {
     console.error("Error fetching session statuses:", error?.message);
-    return {};
+    return null;
   }
 
   const statuses: Record<string, ProblemSessionState> = {};
