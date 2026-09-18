@@ -54,9 +54,14 @@ export default async function AssignmentPage({
     );
     problemsSection = <TeacherProblemList problems={problems} />;
   } else {
+    // A fetch failure degrades to an empty list here (display-only); the
+    // sequential-unlock gate itself fails closed on the same `null` — see
+    // app/tutor/problemLock.ts.
     const [problems, statuses] = await Promise.all([
-      getProblemsByAssignment(supabase, assignmentId),
-      getSessionStatusesByAssignment(supabase, user.id, assignmentId),
+      getProblemsByAssignment(supabase, assignmentId).then((p) => p ?? []),
+      getSessionStatusesByAssignment(supabase, user.id, assignmentId).then(
+        (s) => s ?? {},
+      ),
     ]);
     problemsSection = (
       <StudentProblemList
