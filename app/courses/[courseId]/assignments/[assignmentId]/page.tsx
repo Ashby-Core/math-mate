@@ -1,10 +1,15 @@
 import { notFound } from "next/navigation";
+import type { ReactNode } from "react";
 
 import UserNavbar from "@/app/UserNavbar";
-import ProblemList from "@/app/courses/[courseId]/assignments/[assignmentId]/ProblemList";
+import StudentProblemList from "@/app/courses/[courseId]/assignments/[assignmentId]/StudentProblemList";
+import TeacherProblemList from "@/app/courses/[courseId]/assignments/[assignmentId]/TeacherProblemList";
 import { requireUser } from "@/app/queries/auth";
 import { getAssignmentById } from "@/app/queries/assignments";
-import { getProblemsByAssignment } from "@/app/queries/problems";
+import {
+  getProblemsByAssignment,
+  getProblemsByAssignmentForTeacher,
+} from "@/app/queries/problems";
 import { getSessionStatusesByAssignment } from "@/app/queries/sessions";
 import { getProfileById } from "@/app/queries/profiles";
 import { getActiveProblemId } from "@/app/tutor/assignmentProgress";
@@ -19,23 +24,39 @@ export default async function AssignmentPage({
 
   const { supabase, user } = await requireUser();
 
-  const [profile, assignment, problems] = await Promise.all([
+  const [profile, assignment] = await Promise.all([
     getProfileById(supabase, user.id),
     getAssignmentById(supabase, assignmentId),
-    getProblemsByAssignment(supabase, assignmentId),
   ]);
 
   if (!assignment) {
     notFound();
   }
 
-  // Session state is scoped to a single student, so it's only meaningful for
-  // students — a teacher sees the same list with no phase labels or locking.
-  const showProgress = profile?.userRole !== "teacher";
-  const statuses = showProgress
-    ? await getSessionStatusesByAssignment(supabase, user.id, assignmentId)
-    : {};
-  const activeProblemId = getActiveProblemId(problems, statuses);
+  // Session state is scoped to a single student, so a teacher gets a read-only
+  // view of the problems themselves (question + answer) instead.
+  const isTeacher = profile?.userRole === "teacher";
+
+  let problemsSection: ReactNode;
+  if (isTeacher) {
+    const problems = await getProblemsByAssignmentForTeacher(
+      supabase,
+      assignmentId,
+    );
+    problemsSection = <TeacherProblemList problems={problems} />;
+  } else {
+    const [problems, statuses] = await Promise.all([
+      getProblemsByAssignment(supabase, assignmentId),
+      getSessionStatusesByAssignment(supabase, user.id, assignmentId),
+    ]);
+    problemsSection = (
+      <StudentProblemList
+        problems={problems}
+        statuses={statuses}
+        activeProblemId={getActiveProblemId(problems, statuses)}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -62,14 +83,7 @@ export default async function AssignmentPage({
           <CardHeader className="border-b">
             <CardTitle className="text-xl">Problems</CardTitle>
           </CardHeader>
-          <CardContent>
-            <ProblemList
-              problems={problems}
-              statuses={statuses}
-              activeProblemId={activeProblemId}
-              showProgress={showProgress}
-            />
-          </CardContent>
+          <CardContent>{problemsSection}</CardContent>
         </Card>
       </div>
     </div>

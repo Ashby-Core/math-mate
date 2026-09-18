@@ -99,6 +99,18 @@ export type ProblemListItem = {
   topics: { id: UUID; name: string }[];
 };
 
+// A problem as shown in an assignment's problem list to a teacher. Unlike
+// `ProblemListItem`, it includes `questionContent`/`correctAnswer` — the
+// firewall around those fields exists to keep them off the *student* client,
+// and a teacher already has access to both when authoring the assignment.
+export type TeacherProblemListItem = {
+  id: UUID;
+  orderIndex: number;
+  questionContent: string;
+  correctAnswer: string;
+  topics: { id: UUID; name: string }[];
+};
+
 // Per-problem tutoring status for a student, keyed by problem id. Absence of a
 // key means "not started" (no session row yet).
 export type ProblemStatus = "active" | "completed" | "abandoned";

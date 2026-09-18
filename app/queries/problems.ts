@@ -1,6 +1,6 @@
 import { SupabaseClient } from "@supabase/supabase-js";
 import { UUID } from "crypto";
-import { Problem, ProblemListItem } from "@/app/types";
+import { Problem, ProblemListItem, TeacherProblemListItem } from "@/app/types";
 
 // PostgREST returns a to-one embed (e.g. assignments(course)) as an object at
 // runtime but supabase-js types it as an array. Normalize across both.
@@ -96,9 +96,55 @@ export async function getProblemsByAssignment(
   return data.map((row) => ({
     id: row.id,
     orderIndex: row.order_index,
-    topics: (row.problems_topics ?? []).flatMap((pt) => {
-      const topic = embeddedTopic(pt.topics);
-      return topic ? [{ id: topic.id, name: topic.name }] : [];
-    }),
+    topics: namedTopics(row.problems_topics),
+  }));
+}
+
+/** Maps a `problems_topics(topics(id, name))` join into named topics, dropping any without a resolvable topic. */
+function namedTopics(
+  problemsTopics: { topics: unknown }[] | null,
+): { id: UUID; name: string }[] {
+  return (problemsTopics ?? []).flatMap((pt) => {
+    const topic = embeddedTopic(pt.topics);
+    return topic ? [{ id: topic.id, name: topic.name }] : [];
+  });
+}
+
+/**
+ * Lists the problems in an assignment for a teacher-facing problem list,
+ * ordered by `order_index`. Unlike `getProblemsByAssignment`, this includes
+ * `question_content` and `correct_answer` — a teacher already has both from
+ * authoring the assignment, so the student-facing firewall doesn't apply here.
+ *
+ * @param supabase the Supabase client
+ * @param assignmentId the assignment whose problems to list
+ * @returns the problems with full content, or an empty array on error
+ */
+export async function getProblemsByAssignmentForTeacher(
+  supabase: SupabaseClient,
+  assignmentId: string,
+): Promise<TeacherProblemListItem[]> {
+  const { data, error } = await supabase
+    .from("problems")
+    .select(
+      "id, question_content, correct_answer, order_index, problems_topics(topics(id, name))",
+    )
+    .eq("assignment_id", assignmentId)
+    .order("order_index", { ascending: true });
+
+  if (error || !data) {
+    console.error(
+      "Error fetching problems for assignment (teacher):",
+      error?.message,
+    );
+    return [];
+  }
+
+  return data.map((row) => ({
+    id: row.id,
+    orderIndex: row.order_index,
+    questionContent: row.question_content,
+    correctAnswer: row.correct_answer,
+    topics: namedTopics(row.problems_topics),
   }));
 }

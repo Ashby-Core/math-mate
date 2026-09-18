@@ -6,22 +6,19 @@ import { ProblemSessionState } from "@/app/queries/sessions";
 import { getProblemPhaseLabel } from "@/app/tutor/assignmentProgress";
 import { Card, CardContent } from "@/app/components/ui/card";
 
-interface ProblemListProps {
+interface StudentProblemListProps {
   problems: ProblemListItem[];
-  /** Per-problem session state, keyed by problem id. Empty for a teacher view. */
+  /** Per-problem session state, keyed by problem id. */
   statuses: Record<string, ProblemSessionState>;
-  /** The one problem a student should work next, or null once everything's done. */
+  /** The one problem the student should work next, or null once everything's done. */
   activeProblemId: string | null;
-  /** Whether to show phase labels and lock earlier/later rows (student view only). */
-  showProgress: boolean;
 }
 
-const ProblemList = ({
+const StudentProblemList = ({
   problems,
   statuses,
   activeProblemId,
-  showProgress,
-}: ProblemListProps) => {
+}: StudentProblemListProps) => {
   if (problems.length === 0) {
     return (
       <div className="text-center py-8">
@@ -41,7 +38,7 @@ const ProblemList = ({
         const sessionState = statuses[problem.id];
         const isCompleted = sessionState?.status === "completed";
         const isActive = problem.id === activeProblemId;
-        const isLocked = showProgress && !isCompleted && !isActive;
+        const isLocked = !isCompleted && !isActive;
 
         return (
           <Card
@@ -70,27 +67,16 @@ const ProblemList = ({
               </div>
 
               <div className="flex items-center gap-3 shrink-0">
-                {showProgress && (
-                  <span className="text-xs text-gray-500">
-                    {getProblemPhaseLabel(sessionState)}
-                  </span>
-                )}
-                {isCompleted ? (
+                <span className="text-xs text-gray-500">
+                  {getProblemPhaseLabel(sessionState)}
+                </span>
+                {(isCompleted || isActive) && (
                   <Link
                     href={`/tutor/${problem.id}`}
                     className="text-sm text-primary underline-offset-4 hover:underline"
                   >
-                    Review
+                    {isCompleted ? "Review" : sessionState ? "Continue" : "Start"}
                   </Link>
-                ) : (
-                  (isActive || !showProgress) && (
-                    <Link
-                      href={`/tutor/${problem.id}`}
-                      className="text-sm text-primary underline-offset-4 hover:underline"
-                    >
-                      Start
-                    </Link>
-                  )
                 )}
               </div>
             </CardContent>
@@ -101,4 +87,4 @@ const ProblemList = ({
   );
 };
 
-export default ProblemList;
+export default StudentProblemList;
