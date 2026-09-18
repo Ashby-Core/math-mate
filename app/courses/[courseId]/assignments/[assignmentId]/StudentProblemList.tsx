@@ -3,7 +3,7 @@ import { CheckCircle2, FileQuestion, Lock } from "lucide-react";
 
 import { ProblemListItem } from "@/app/types";
 import { ProblemSessionState } from "@/app/queries/sessions";
-import { getProblemPhaseLabel } from "@/app/tutor/assignmentProgress";
+import { getProblemCtaLabel, getProblemPhaseLabel } from "@/app/tutor/assignmentProgress";
 import { Card, CardContent } from "@/app/components/ui/card";
 
 interface StudentProblemListProps {
@@ -39,6 +39,13 @@ const StudentProblemList = ({
         const isCompleted = sessionState?.status === "completed";
         const isActive = problem.id === activeProblemId;
         const isLocked = !isCompleted && !isActive;
+        // A locked row never shows live progress, even if its underlying
+        // session state says otherwise (e.g. a session somehow exists for a
+        // problem past the current one) — the lock icon is the whole story.
+        const phaseLabel = isLocked
+          ? "Not started"
+          : getProblemPhaseLabel(sessionState);
+        const ctaLabel = getProblemCtaLabel(sessionState, isActive);
 
         return (
           <Card
@@ -67,15 +74,13 @@ const StudentProblemList = ({
               </div>
 
               <div className="flex items-center gap-3 shrink-0">
-                <span className="text-xs text-gray-500">
-                  {getProblemPhaseLabel(sessionState)}
-                </span>
-                {(isCompleted || isActive) && (
+                <span className="text-xs text-gray-500">{phaseLabel}</span>
+                {ctaLabel && (
                   <Link
                     href={`/tutor/${problem.id}`}
                     className="text-sm text-primary underline-offset-4 hover:underline"
                   >
-                    {isCompleted ? "Review" : sessionState ? "Continue" : "Start"}
+                    {ctaLabel}
                   </Link>
                 )}
               </div>

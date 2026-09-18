@@ -11,15 +11,39 @@ export type ProblemPhaseLabel = "Not started" | "Gap check" | "Solve" | "Complet
 /**
  * Labels a problem's row from its session state (absent when the student has
  * no session for it yet, which reads the same as an `intro`-phase session).
- * Status is checked before phase since a completed session's terminal phase
- * is `review`, which would otherwise read as still-in-progress.
+ * An `abandoned` session also reads as "Not started": `POST /api/sessions`
+ * starts a fresh session for it rather than resuming, so it has no more
+ * progress to show than an unstarted problem. Status is checked before phase
+ * since a completed session's terminal phase is `review`, which would
+ * otherwise read as still-in-progress.
  */
 export function getProblemPhaseLabel(
   sessionState: ProblemSessionState | undefined,
 ): ProblemPhaseLabel {
-  if (!sessionState || sessionState.phase === "intro") return "Not started";
+  if (
+    !sessionState ||
+    sessionState.status === "abandoned" ||
+    sessionState.phase === "intro"
+  ) {
+    return "Not started";
+  }
   if (sessionState.status === "completed") return "Completed";
   return sessionState.phase === "gap_check" ? "Gap check" : "Solve";
+}
+
+/**
+ * The label for a row's call-to-action link, or `null` when the row has none
+ * (a locked, non-current problem). "Continue" only applies to a truly
+ * resumable session (`status: "active"`) — an abandoned session's row still
+ * links out for the current problem, but starts over, so it reads "Start".
+ */
+export function getProblemCtaLabel(
+  sessionState: ProblemSessionState | undefined,
+  isActive: boolean,
+): "Start" | "Continue" | "Review" | null {
+  if (sessionState?.status === "completed") return "Review";
+  if (!isActive) return null;
+  return sessionState?.status === "active" ? "Continue" : "Start";
 }
 
 /**
