@@ -17,12 +17,13 @@ const row = {
   question_content: "What is 3/4 + 1/8?",
   correct_answer: "7/8",
   order_index: 2,
+  assignment_id: "a1",
   assignments: { course: "c1" },
   problems_topics: [{ topic_id: "t1" }, { topic_id: "t2" }],
 };
 
 describe("getProblemById", () => {
-  it("maps the row to { problem, courseId } with tops from the join", async () => {
+  it("maps the row to { problem, courseId, assignmentId } with tops from the join", async () => {
     const supabase = fakeSupabase({ data: row, error: null });
     const result = await getProblemById(supabase, "p1");
     expect(result).toEqual({
@@ -34,6 +35,7 @@ describe("getProblemById", () => {
         tops: ["t1", "t2"],
       },
       courseId: "c1",
+      assignmentId: "a1",
     });
   });
 

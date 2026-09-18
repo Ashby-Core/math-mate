@@ -10,26 +10,26 @@ function embeddedCourse(assignments: unknown): string | null {
 }
 
 /**
- * Fetches a single problem by id and the course it belongs to (derived via its
- * assignment), in one query. The problem's topics (`tops`) come from the
- * `problems_topics` join table. Returns `null` when the problem doesn't exist,
- * its course can't be resolved, or on error.
+ * Fetches a single problem by id and the course + assignment it belongs to
+ * (course derived via its assignment), in one query. The problem's topics
+ * (`tops`) come from the `problems_topics` join table. Returns `null` when
+ * the problem doesn't exist, its course can't be resolved, or on error.
  *
  * `correctAnswer` is included for the tutoring brain's use — callers must never
  * forward it to the client (see `app/tutor/responseShape.ts`).
  *
  * @param supabase the Supabase client
  * @param problemId the problem to load
- * @returns the problem plus its courseId, or null
+ * @returns the problem plus its courseId and assignmentId, or null
  */
 export async function getProblemById(
   supabase: SupabaseClient,
   problemId: string,
-): Promise<{ problem: Problem; courseId: string } | null> {
+): Promise<{ problem: Problem; courseId: string; assignmentId: string } | null> {
   const { data, error } = await supabase
     .from("problems")
     .select(
-      "id, question_content, correct_answer, order_index, assignments(course), problems_topics(topic_id)",
+      "id, question_content, correct_answer, order_index, assignment_id, assignments(course), problems_topics(topic_id)",
     )
     .eq("id", problemId)
     .single();
@@ -58,6 +58,7 @@ export async function getProblemById(
       tops,
     },
     courseId,
+    assignmentId: data.assignment_id,
   };
 }
 
